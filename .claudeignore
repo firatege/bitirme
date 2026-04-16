@@ -1,0 +1,86 @@
+# macOS / OS cruft
+__MACOSX/
+**/.DS_Store
+Archive.zip
+
+# IDE
+.idea/
+**/.ipynb_checkpoints/
+
+# Binary / serialized models
+serialized_models/
+*.joblib
+
+# Large raw + intermediate data
+motul_data.csv
+veri_matrisi_final_sales_orders_stock_calendar_lags_fx.csv
+Cluster0_AltKume2.csv
+Cluster0_AltKume2_dikey.csv
+adfuller_results_subcluster_2.csv
+best_candidate_with_PI.csv
+bootstrap_candidates_summary.csv
+
+# Derived outputs (thousands of per-SKU CSVs and PNGs)
+outputs/
+v7_full/
+mnt/
+logs/
+
+# Archival Jupyter notebooks from Phases 1-4
+# (Kept on disk for thesis reference, but excluded from Claude context.)
+# Current canonical notebook is "Sales Forecast v7_full.ipynb" only.
+motul_data_analysis.ipynb
+try1.ipynb
+Untitled.ipynb
+Untitled1.ipynb
+Untitled2.ipynb
+Untitled3.ipynb
+Untitled4.ipynb
+Untitled5.ipynb
+Untitled6.ipynb
+Untitled7.ipynb
+
+# Phase 1: single-SKU baselines on 303-104092
+303-104092-3-Model.ipynb
+303-104092-3-model-param-opt.ipynb
+303-104092-New-Data(CSV)-Sarıma-Prohbet-Hybrids-Direct XGBoost with opt.ipynb
+303-104092-New-Data-V2-RandomForest-Added.ipynb
+303-104092-Probhet-XGBoost-Hybrid.ipynb
+303-104092-Probhet-XGBoost-Hybrid-opt.ipynb
+303-104092-Probhet-XGBoost-Hybrid-opt-with-stock-order.ipynb
+303-104092-Probhet -XGBoost.ipynb
+
+# Phase 2: exog ensemble exploration
+Auto-Exog Forecast 1.ipynb
+Auto-Exog Forecast Best-MAE - Ensemble_Prohbet-Sarıma-Ets With RF _ XGB With Opt.ipynb
+Auto-Exog Forecast (Prophet - SARIMA - ETS) + RF & XGB (HP yok).ipynb
+Auto-Exog Forecast-Prophet - SARIMA - ETS With RF - XGB Comparison.ipynb
+3 Exog Strategy (Prophet-only - Weighted - Inverse-MAE) + RF & XGB (HP var).ipynb
+Exog Ensemble Tuning + Sızıntısız-Kausal + PI.ipynb
+-Model RF & XGB + Exog Ensemble Prophet+SARIMA+ETS+RF-Exog+XGB-Exog.ipynb
+Y-Model (RF & XGB) + Exog Kıyas.ipynb
+
+# Phase 3: Sales Forecast v2-v6 OMS editions
+Sales Forecast v2 (Patched & Integrated).ipynb
+Sales Forecast v3.ipynb
+Sales Forecast v4.ipynb
+Sales Forecast v5 — OMS Edition.ipynb
+Sales Forecast v6.1 — OMS Edition Ridge-NNLS + Smooth Adaptive + OMS Scenarios.ipynb
+
+# Phase 4: multi-SKU + parallel + REFIT
+Sales Forecast V6_multi_sku.ipynb
+Sales Forecast V6_multi_sku_OMS_Edt-Refit.ipynb
+Sales Forecast V6_multi_sku_OMS_Edt-Refit-Time Decay NNLS - Intermittent - Parallel-Copy1.ipynb
+Sales Forecast V6_multi_sku_OMS_Edt-Refit-Time Decay NNLS - Intermittent - Parallel-v2.ipynb
+v6_multi_sku.py — OMS Edition  Last V.ipynb
+v6_multi_sku.py — OMS Edition(Probe→Escalate + REFIT Rollback, Speed-Pruned .ipynb
+v6_multi_sku.py — OMS Edition -- Speed-Pruned .ipynb
+v6_multi_sku.py — Probe→Escalate v2.1 (fast) .ipynb
+v6_multi_sku.py — Probe→Escalate v2 (fast) .ipynb
+
+# Notebook twin of model_v2.py
+model_v2.ipynb
+
+# Keep: model_v3.py, model_v2.py, OMS.py, proje_ozeti.md, PROJECT_OVERVIEW.md,
+#       CLAUDE.md, Sales Forecast v7_full.ipynb, veri hazırlama.ipynb,
+#       panel_sales_orders_stock.csv, sku_config.csv, panel_sales_orders_stock
