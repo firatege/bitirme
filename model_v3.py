@@ -78,7 +78,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 
 # --- Dosya yolları ---
 PANEL_CSV  = "panel_sales_orders_stock.csv"  # sku, ds, y, orders, stock
-PARAMS_CSV = "sku_params.csv"                # sku, T_CHECK, H_COVER, Q, MOQ, LOT_SIZE, STARTING_STOCK_OVERRIDE
+PARAMS_CSV = "sku_config.csv"                # sku, T_CHECK, H_COVER, q_target, lead_time_mo, MOQ, lot_size
 
 # --- Tarih bölmeleri ---
 VAL_START        = pd.Timestamp("2024-08-01")
@@ -1382,10 +1382,16 @@ def run_for_sku(sku, d_sku, params_row, outdir):
 
 
 def load_params():
-    """SKU başına politika parametrelerini CSV’den yükle; yoksa makul varsayılanlar."""
+    """SKU başına politika parametrelerini CSV'den yükle; yoksa makul varsayılanlar."""
     defaults = {"T_CHECK":3, "H_COVER":6, "Q":0.50, "MOQ":0.0, "LOT_SIZE":1.0, "STARTING_STOCK_OVERRIDE":np.nan}
     if not os.path.exists(PARAMS_CSV): return {}, defaults
     p = pd.read_csv(PARAMS_CSV)
+    # Kolon adı uyumu: sku_config.csv 'q_target' ve 'lot_size' kullanıyor
+    col_map = {"q_target": "Q", "lead_time_mo": "LEAD_TIME"}
+    p = p.rename(columns=col_map)
+    # lot_size ve LOT_SIZE uyumu
+    if "lot_size" in p.columns and "LOT_SIZE" not in p.columns:
+        p = p.rename(columns={"lot_size": "LOT_SIZE"})
     for c in ["sku","T_CHECK","H_COVER","Q","MOQ","LOT_SIZE","STARTING_STOCK_OVERRIDE"]:
         if c not in p.columns: p[c] = np.nan
     p["sku"] = p["sku"].astype(str)
@@ -1400,7 +1406,7 @@ def load_params():
             "Q":       _num(r["Q"],       defaults["Q"]),
             "MOQ":     _num(r["MOQ"],     defaults["MOQ"]),
             "LOT_SIZE":_num(r["LOT_SIZE"],defaults["LOT_SIZE"]),
-            "STARTING_STOCK_OVERRIDE": (_num(r["STARTING_STOCK_OVERRIDE"], defaults["STARTING_STOCK_OVERRIDE"]))
+            "STARTING_STOCK_OVERRIDE": (_num(r.get("STARTING_STOCK_OVERRIDE", np.nan), defaults["STARTING_STOCK_OVERRIDE"]))
         }
     return mp_, defaults
 

@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sipariş Paneli</title>
+    <!-- Inter Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="dashboard-wrapper">
+        <header class="topbar">
+            <div>
+                <h1>Tahmin ve Sipariş Paneli</h1>
+                <p class="subtitle" id="last-updated">Son Güncelleme: Yükleniyor...</p>
+            </div>
+            <div class="topbar-actions">
+                <div class="toggle-container">
+                    <span class="toggle-label">Sadece Kritik Ürünler</span>
+                    <label class="switch">
+                        <input type="checkbox" id="filter-critical-toggle">
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
+        </header>
+
+        <section class="kpi-section">
+            <div class="kpi-card">
+                <div class="kpi-title">Toplam SKU</div>
+                <div class="kpi-value" id="kpi-total">-</div>
+            </div>
+            <div class="kpi-card">
+                <div class="kpi-title">Sipariş Bekleyen</div>
+                <div class="kpi-value warning" id="kpi-orders">-</div>
+            </div>
+            <div class="kpi-card urgent-kpi">
+                <div class="kpi-title">Acil Durum (Kritik)</div>
+                <div class="kpi-value critical" id="kpi-urgent">-</div>
+            </div>
+        </section>
+
+        <section class="table-section">
+            <div class="table-scroll-container">
+                <table id="inventory-table">
+                    <thead>
+                        <tr>
+                            <th>SKU & Profil</th>
+                            <th>Mevcut Stok</th>
+                            <th>Kümülatif Talep (6A)</th>
+                            <th>Stoksuzluk Riski (3A / 6A)</th>
+                            <th>Durum</th>
+                            <th class="text-right">Önerilen Sipariş</th>
+                        </tr>
+                    </thead>
+                    <tbody id="table-body">
+                        <!-- JS ile doldurulacak -->
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
