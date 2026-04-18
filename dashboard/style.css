@@ -68,6 +68,12 @@ body {
     color: var(--text-muted);
 }
 
+.topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
 .toggle-container {
     display: flex;
     align-items: center;
@@ -275,7 +281,8 @@ td {
 .tooltip-container .tooltip-card {
     visibility: hidden;
     position: absolute;
-    bottom: 120%;
+    top: 120%;
+    bottom: auto;
     left: 50%;
     transform: translateX(-50%);
     background: var(--surface-color);
@@ -290,6 +297,13 @@ td {
     
     font-size: 0.75rem;
     color: var(--text-main);
+}
+
+.tooltip-container.tooltip-left .tooltip-card {
+    left: 0;
+    top: 120%;
+    bottom: auto;
+    transform: none;
 }
 
 .tooltip-container:hover .tooltip-card {

@@ -79,18 +79,19 @@ def _read_forecast_totals(sku_outdir: str, best_exog: str, best_y: str, phase: s
 
     def _sum_yhat(path):
         if not os.path.exists(path):
-            return None, None, None
+            return None, None, None, []
         try:
             df = pd.read_csv(path, parse_dates=["ds"])
+            yhat_array = df["yhat"].tolist()
             total = float(df["yhat"].sum())
             lo80  = float(df["pi80_lo"].sum()) if "pi80_lo" in df.columns else None
             hi80  = float(df["pi80_hi"].sum()) if "pi80_hi" in df.columns else None
-            return total, lo80, hi80
+            return total, lo80, hi80, yhat_array
         except Exception:
-            return None, None, None
+            return None, None, None, []
 
-    yhat_6m, lo80_6m, hi80_6m = _sum_yhat(full_path)
-    yhat_3m, lo80_3m, hi80_3m = _sum_yhat(short_path)
+    yhat_6m, lo80_6m, hi80_6m, yhat_array = _sum_yhat(full_path)
+    yhat_3m, lo80_3m, hi80_3m, _ = _sum_yhat(short_path)
 
     return {
         "yhat_3m":   yhat_3m,
@@ -99,6 +100,7 @@ def _read_forecast_totals(sku_outdir: str, best_exog: str, best_y: str, phase: s
         "yhat_6m":   yhat_6m,
         "pi80_lo_6m": lo80_6m,
         "pi80_hi_6m": hi80_6m,
+        "yhat_array": yhat_array,
     }
 
 
@@ -220,6 +222,9 @@ def build_report() -> tuple[pd.DataFrame, list]:
             "forecast_6m":      fc_totals["yhat_6m"],
             "cum_demand_6m":    round(cum_demand, 0),
             "model":            f"{best_exog} / {best_y} ({phase})",
+            "moq":              policy.get("MOQ", 0),
+            "lot_size":         policy.get("LOT_SIZE", 1),
+            "forecast_monthly": fc_totals["yhat_array"],
         })
 
     report_df     = pd.DataFrame(rows)

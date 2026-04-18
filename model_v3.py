@@ -84,7 +84,7 @@ PARAMS_CSV = "sku_config.csv"                # sku, T_CHECK, H_COVER, q_target, 
 VAL_START        = pd.Timestamp("2024-08-01")
 VAL_END          = pd.Timestamp("2025-01-01")
 TEST_START       = pd.Timestamp("2025-02-01")
-TEST_END         = pd.Timestamp("2025-08-01")
+TEST_END         = pd.Timestamp("2026-01-01")  # 12 Ay (Şub 2025 - Oca 2026)
 TEST_END_SHORT   = pd.Timestamp("2025-04-01")
 
 # ---- SPEED / PRUNE PRESET ----

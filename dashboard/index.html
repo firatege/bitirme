@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="style.css?v=5">
 </head>
 <body>
     <div class="dashboard-wrapper">
@@ -17,7 +17,13 @@
                 <h1>Tahmin ve Sipariş Paneli</h1>
                 <p class="subtitle" id="last-updated">Son Güncelleme: Yükleniyor...</p>
             </div>
-            <div class="topbar-actions">
+            
+            <div class="topbar-right">
+                <div class="slider-control" style="display: flex; align-items: center; gap: 1rem; background: var(--surface-color); padding: 0.5rem 1rem; border-radius: var(--radius-md); box-shadow: var(--shadow-sm); border: 1px solid var(--border-color);">
+                    <span class="toggle-label" style="font-weight: 500;">Hedef Ufku: <span id="horizon-label" style="color: var(--color-red); font-weight: 700;">6 Ay</span></span>
+                    <input type="range" id="horizon-slider" min="1" max="12" value="6" style="accent-color: var(--color-red); width: 100px;">
+                </div>
+
                 <div class="toggle-container">
                     <span class="toggle-label">Sadece Kritik Ürünler</span>
                     <label class="switch">
@@ -64,6 +70,6 @@
         </section>
     </div>
 
-    <script src="script.js"></script>
+    <script src="script.js?v=5"></script>
 </body>
 </html>
