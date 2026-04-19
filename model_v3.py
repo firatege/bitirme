@@ -27,7 +27,7 @@ Notlar:
 - İstenirse **orders** ve **stock** için **farklı EXOG aileleri** seçilir (EXOG_PER_VAR_SELECTION=True).
 """
 
-import os, json, warnings, sys, math, logging
+import os, json, warnings, sys, math, logging, time
 warnings.filterwarnings("ignore")
 warnings.filterwarnings("ignore", category=UserWarning)
 warnings.filterwarnings("ignore", category=FutureWarning)
@@ -151,6 +151,95 @@ SKUS_FILTER   = None
 CRITICAL_SKUS = set()            # {"SKU123","SKU789"}
 
 GENERATE_PLOTS = True
+
+
+# ======================================================================
+# ========================= L O G   U T I L S ==========================
+# ======================================================================
+
+_C = {
+    "reset":"\033[0m","bold":"\033[1m","dim":"\033[2m",
+    "green":"\033[92m","yellow":"\033[93m","red":"\033[91m",
+    "cyan":"\033[96m","blue":"\033[94m","gray":"\033[90m","white":"\033[97m",
+    "orange":"\033[33m","magenta":"\033[95m",
+}
+def _c(*codes):
+    def wrap(text): return "".join(_C[c] for c in codes) + str(text) + _C["reset"]
+    return wrap
+
+_run_ctx = {"total": 0, "done": 0, "t_start": None, "results": []}
+
+def _bar(done, total, width=20):
+    if total == 0: return ""
+    filled = int(width * done / total)
+    return "█" * filled + "░" * (width - filled)
+
+def _log_sku_header(sku):
+    done = _run_ctx["done"] + 1
+    total = _run_ctx["total"]
+    pct = f"{done}/{total}" if total else sku
+    bar = _bar(done - 1, total)
+    elapsed = f"  {time.time()-_run_ctx['t_start']:.0f}s" if _run_ctx["t_start"] else ""
+    print(f"\n{_c('cyan','bold')('─'*70)}")
+    print(f"  {_c('cyan','bold')(f'[{pct}]')}  SKU: {_c('white','bold')(sku)}  "
+          f"{_c('gray')(bar)}  {_c('gray')(pct+elapsed)}")
+    print(_c("cyan","bold")("─"*70))
+
+def _log_rocv(rf_mae, xgb_mae=None):
+    rf_s  = f"RF {_c('yellow')(f'MAE={rf_mae:.1f}')}"
+    xgb_s = f"  XGB {_c('yellow')(f'MAE={xgb_mae:.1f}')}" if xgb_mae is not None else ""
+    print(f"  {_c('gray')('ROCV')}  {rf_s}{xgb_s}")
+
+def _log_exog(methods, best_method, best_mae):
+    items = "  ".join(m if m != best_method else _c("green","bold")(f"{m}✓") for m in methods)
+    print(f"  {_c('gray')('EXOG')}  {items}  {_c('gray')(f'→ best: {best_method} MAE={best_mae:.1f}')}")
+
+def _log_test(phase, mae, rmse, mape, refit_better=None):
+    tag = _c("green")(phase) if phase == "REFIT" else _c("blue")(phase)
+    rb  = ""
+    if refit_better is True:  rb = f"  {_c('green')('✓ daha iyi')}"
+    if refit_better is False: rb = f"  {_c('red')('✗ daha kötü → rollback')}"
+    print(f"  {_c('gray')('TEST')}  {tag}  MAE={_c('white')(f'{mae:.1f}')}  "
+          f"RMSE={rmse:.1f}  MAPE={mape:.1f}%{rb}")
+
+def _log_oms(exog, y_var, phase, qty, p3m, p6m, e_t, stock):
+    suffix = "+REFIT" if phase == "REFIT" else ""
+    model  = _c("cyan")(f"{exog}+{y_var}{suffix}")
+    if qty > 0:
+        action = _c("red","bold")(f"SİPARİŞ VER  qty={qty}")
+    else:
+        action = _c("green")("sipariş yok")
+    et_s = f"{e_t:.1f}mo" if e_t is not None and not (isinstance(e_t,float) and math.isnan(e_t)) else "NA"
+    print(f"  {_c('gray')('OMS')}   {model}  stock={stock:.0f}  "
+          f"P3m={p3m:.0%} P6m={p6m:.0%} E[T]={et_s}  →  {action}")
+
+def _log_done(sku, mae, qty, elapsed_s):
+    _run_ctx["done"] += 1
+    _run_ctx["results"].append({"sku": sku, "mae": mae, "qty": qty, "s": elapsed_s})
+
+def _log_final():
+    results = _run_ctx["results"]
+    if not results: return
+    total_s = time.time() - _run_ctx["t_start"] if _run_ctx["t_start"] else 0
+    maes    = [r["mae"] for r in results if r["mae"] is not None]
+    avg_mae = sum(maes)/len(maes) if maes else 0
+    n_order = sum(1 for r in results if r["qty"] > 0)
+
+    print(f"\n{'='*70}")
+    print(f"  {_c('green','bold')('TAMAMLANDI')}  "
+          f"{len(results)} SKU  /  "
+          f"ort. MAE={_c('yellow')(f'{avg_mae:.1f}')}  /  "
+          f"sipariş gereken={_c('red' if n_order else 'green')(str(n_order))}  /  "
+          f"süre={total_s:.0f}s")
+    print(f"{'='*70}")
+    print(f"\n  {'SKU':<20} {'MAE':>7} {'Qty':>6}  {'Süre':>6}")
+    print("  " + "-"*42)
+    for r in sorted(results, key=lambda x: -(x["qty"] or 0)):
+        qty_s = _c("red")(f"{r['qty']:>6}") if r["qty"] > 0 else f"{'—':>6}"
+        mae_s = f"{r['mae']:.1f}" if r["mae"] is not None else "—"
+        print(f"  {r['sku']:<20} {mae_s:>7} {qty_s}  {r['s']:>4.0f}s")
+    print(f"\n  Çıktılar: outputs/<sku>/  |  JSON: pipeline_results.json")
+    print(f"{'='*70}\n")
 
 
 # ======================================================================
@@ -989,7 +1078,8 @@ def run_for_sku(sku, d_sku, params_row, outdir):
       - TEST ileri tahmin + PI + OMS sipariş önerisi
       - (Opsiyonel) REFIT ve rollback
     """
-    print("\n" + "="*90); print(f"SKU: {sku}")
+    _sku_t0 = time.time()
+    _log_sku_header(sku)
     d = d_sku[["ds","y","orders","stock"]].copy()
     d = ensure_ms_freq(d)
 
@@ -1005,9 +1095,7 @@ def run_for_sku(sku, d_sku, params_row, outdir):
     if HAVE_XGB: xgb_model, xgb_params, xgb_rocv = optimize_xgb_rocv(trainval_df)
     else:        xgb_model, xgb_params, xgb_rocv = rf_model, {}, rf_rocv
 
-    print("\n=== ROCV Best Params (FAST={} ) ===".format(FAST_MODE))
-    print("RF :", rf_params,  f"| ROCV_MAE={rf_rocv:.2f}")
-    if HAVE_XGB: print("XGB:", xgb_params, f"| ROCV_MAE={xgb_rocv:.2f}")
+    _log_rocv(rf_rocv, xgb_rocv if HAVE_XGB else None)
 
     # -------- PROBE → ESCALATE seçimi --------
     baseline_mae = baseline_val_mae(d, BASELINE_KIND)
@@ -1048,7 +1136,7 @@ def run_for_sku(sku, d_sku, params_row, outdir):
     BASIC = list(exog_val.keys())
     if "Intermittent" in probe and "Intermittent" not in BASIC:
         BASIC = ["Intermittent"] + BASIC
-    print(f"\nSeçilen EXOG yöntemleri (SKU={sku}): {BASIC}")
+    # EXOG log — en iyi metod VAL tablosundan sonra basılacak
 
     # >>> YENİ: orders/stock için farklı EXOG aileleri seç (VAL’de kolon-bazlı MAE)
     hybrid_tag = None
@@ -1073,9 +1161,12 @@ def run_for_sku(sku, d_sku, params_row, outdir):
     tbl_basic = val_table(val_rep)
     os.makedirs(outdir, exist_ok=True)
     tbl_basic.to_csv(os.path.join(outdir,"val_exog_selection_basic.csv"), index=False)
-    print("\n=== VAL Exog Selection (BASIC + Hybrid varsa) ===")
-    if len(tbl_basic): print(tbl_basic.to_string(index=False))
-    else: print("(BASIC boş — Intermittent-only olabilir)")
+    if len(tbl_basic):
+        best_exog_m = tbl_basic.iloc[0]["Exog"]
+        best_exog_v = tbl_basic.iloc[0]["VAL_MAE_YENS"]
+        _log_exog(tbl_basic["Exog"].tolist(), best_exog_m, best_exog_v)
+    else:
+        print(f"  {_c('gray')('EXOG')}  (Intermittent-only)")
 
     # TEST EXOG’lar (full/short)
     def build_test_basic(method):
@@ -1162,13 +1253,15 @@ def run_for_sku(sku, d_sku, params_row, outdir):
     summary=pd.DataFrame(rows, columns=["Horizon","Exog","Y-Variant","MAE","RMSE","MAPE","w_RF","w_XGB","P_stockout_3m","P_stockout_6m","E_T_stockout_mo"])\
                .sort_values(["Horizon","Exog","Y-Variant"])
     summary.to_csv(os.path.join(outdir,"test_summary_ALL.csv"), index=False)
-    print("\n=== TEST Summary — (PRE) ==="); print(summary.head(10).to_string(index=False))
+    _pre_best_row = summary[summary["Horizon"]=="Full"].sort_values("MAE").iloc[0] if len(summary) else None
+    if _pre_best_row is not None:
+        _log_test("PRE", _pre_best_row["MAE"], _pre_best_row["RMSE"], _pre_best_row["MAPE"])
 
     # ====== REFIT (isteğe bağlı) ======
     combined = summary.assign(Phase="PRE")
 
     if ENABLE_REFIT and len(exog_test_full)>0:
-        print("\n=== REFIT: En güncel veri ile modeller yeniden eğitiliyor... ===")
+        print(f"  {_c('gray')('REFIT')} yeniden eğitiliyor...")
         rf_refit, xgb_refit = refit_models_on_full(trainval_df)
 
         val_resid_map_refit = {}
@@ -1219,12 +1312,20 @@ def run_for_sku(sku, d_sku, params_row, outdir):
                          .sort_values(["Horizon","Exog","Y-Variant"])
         pre_best = summary[summary["Horizon"]=="Full"]["MAE"].min()
         ref_best = summary_refit[summary_refit["Horizon"]=="Full"]["MAE"].min()
-        if (pd.notna(pre_best) and pd.notna(ref_best) and (ref_best > pre_best*(1.0+REFIT_ROLLBACK_EPS))):
-            print("[REFIT] Daha kötü tespit edildi → REFIT sonuçları devre dışı.")
+        _refit_better = not (pd.notna(pre_best) and pd.notna(ref_best) and
+                             (ref_best > pre_best*(1.0+REFIT_ROLLBACK_EPS)))
+        _refit_best_row = summary_refit[summary_refit["Horizon"]=="Full"].sort_values("MAE").iloc[0] \
+                          if len(summary_refit) else None
+        if not _refit_better:
+            _log_test("REFIT", _refit_best_row["MAE"] if _refit_best_row is not None else float("nan"),
+                      _refit_best_row["RMSE"] if _refit_best_row is not None else 0,
+                      _refit_best_row["MAPE"] if _refit_best_row is not None else 0,
+                      refit_better=False)
         else:
             summary_refit.to_csv(os.path.join(outdir,"test_summary_ALL_REFIT.csv"), index=False)
-            print("\n=== TEST Summary — (REFIT) ===")
-            print(summary_refit.head(10).to_string(index=False))
+            if _refit_best_row is not None:
+                _log_test("REFIT", _refit_best_row["MAE"], _refit_best_row["RMSE"],
+                          _refit_best_row["MAPE"], refit_better=True)
             ref_with_phase = summary_refit.assign(Phase="REFIT")
             combined = pd.concat([combined, ref_with_phase], ignore_index=True)
 
@@ -1260,14 +1361,11 @@ def run_for_sku(sku, d_sku, params_row, outdir):
     raw_qty  = max(0.0, cum_need - start_stock) if (e_t is not None and (not pd.isna(e_t)) and e_t <= T_CHECK) else 0.0
     ord_qty  = round_moq_lot(raw_qty, moq=MOQ, lot=LOT)
 
-    print("\n=== OMS Recommendation (policy) ===")
-    print(f"Selected combo: Exog={BEST_EXOG} | Y={BEST_Y}{chosen_suffix}")
-    print(f"Starting stock: {start_stock:.2f}")
-    print(f"Stockout: P<=3m={p3:.3f}, P<=6m={p6:.3f}, E[T]={('NA' if pd.isna(e_t) else f'{e_t:.3f}')} months")
-    print(f"Policy: if E[T] <= {T_CHECK} months -> cover {H_COVER} months at q={Q}")
-    print(f"Cumulative demand needed (q{int(Q*100)} for {H_COVER}m): {cum_need:.2f}")
-    if ord_qty>0: print(f"REORDER NEEDED → Order Qty ≈ {ord_qty:.2f} (raw={raw_qty:.2f})")
-    else:         print("No reorder needed under current policy.")
+    _best_phase = "REFIT" if use_refit else "PRE"
+    _best_mae   = (_refit_best_row["MAE"] if (use_refit and "_refit_best_row" in dir() and _refit_best_row is not None)
+                   else (_pre_best_row["MAE"] if "_pre_best_row" in dir() and _pre_best_row is not None else float("nan")))
+    _log_oms(BEST_EXOG, BEST_Y, _best_phase, int(ord_qty), p3, p6, e_t, start_stock)
+    _log_done(sku, _best_mae if not math.isnan(_best_mae) else None, int(ord_qty), time.time()-_sku_t0)
 
     out_sel_name = f"preds_full_selected_{BEST_EXOG}_{BEST_Y}{chosen_suffix}.csv".replace(' ','_')
     preds_pi.to_csv(os.path.join(outdir, out_sel_name), index=False)
@@ -1361,6 +1459,13 @@ def main():
     os.makedirs("outputs", exist_ok=True)
     os.makedirs("outputs/_SUMMARY", exist_ok=True)
 
+    all_skus = [s for s, _ in panel.groupby("sku", sort=False)
+                if not (SKUS_FILTER and s not in SKUS_FILTER)]
+    _run_ctx["total"]   = len(all_skus)
+    _run_ctx["done"]    = 0
+    _run_ctx["t_start"] = time.time()
+    _run_ctx["results"] = []
+
     tasks = []
     for sku, df_sku in panel.groupby("sku", sort=False):
         if SKUS_FILTER and sku not in SKUS_FILTER: continue
@@ -1378,9 +1483,9 @@ def main():
                 for f in as_completed(futs):
                     try:
                         done_sku = f.result()
-                        print(f"[PARALLEL-THREAD] Tamamlandı: {done_sku}")
+                        print(f"  {_c('green')('✓')} {done_sku}")
                     except Exception as e:
-                        print(f"[PARALLEL-THREAD] Hata: {e}")
+                        print(f"  {_c('red')('✗')} {e}")
         else:
             ctx = mp.get_context("spawn")
             with ProcessPoolExecutor(max_workers=MAX_WORKERS, mp_context=ctx) as ex:
@@ -1388,9 +1493,9 @@ def main():
                 for f in as_completed(futs):
                     try:
                         done_sku = f.result()
-                        print(f"[PARALLEL] Tamamlandı: {done_sku}")
+                        print(f"  {_c('green')('✓')} {done_sku}")
                     except Exception as e:
-                        print(f"[PARALLEL] Hata: {e}")
+                        print(f"  {_c('red')('✗')} {e}")
 
     # Özetleri topla
     all_summary = []
@@ -1407,7 +1512,7 @@ def main():
         big = pd.concat(all_summary, ignore_index=True)
         big.to_csv("outputs/_SUMMARY/test_summary_ALL_SKUs.csv", index=False)
 
-    print("\nTamamlandı. Tüm çıktılar: outputs/<sku>/ ve outputs/_SUMMARY/ altında.")
+    _log_final()
 
 if __name__ == "__main__":
     try:
