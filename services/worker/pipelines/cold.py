@@ -298,22 +298,25 @@ def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None
             for ex_name, ex_tbl in pool.items():
                 rep = val_rep_refit.get(ex_name) or next(iter(val_rep_refit.values()))
                 for variant in variants:
-                    # Same logic as PRE but models are refit_*
+                    # Match scripts/model_v3.py: REFIT predicts from train-only history
+                    # (hist_for_val), not train+val (hist_min). This makes the lag features
+                    # at test_start differ from PRE, producing distinct predictions even
+                    # when the refit models are deterministic clones of PRE's final fit.
                     if variant == "RF":
                         p, _ = recursive_forward_predict_y(
-                            rf_refit, hist_min.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
+                            rf_refit, hist_for_val.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
                         )
                     elif variant == "XGB" and HAVE_XGB and xgb_refit is not None:
                         p, _ = recursive_forward_predict_y(
-                            xgb_refit, hist_min.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
+                            xgb_refit, hist_for_val.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
                         )
                     else:
                         prf, _ = recursive_forward_predict_y(
-                            rf_refit, hist_min.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
+                            rf_refit, hist_for_val.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
                         )
                         if HAVE_XGB and xgb_refit is not None:
                             pxg, _ = recursive_forward_predict_y(
-                                xgb_refit, hist_min.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
+                                xgb_refit, hist_for_val.copy(), ex_tbl, cfg.test_start, ex_tbl["ds"].max()
                             )
                             p = prf.merge(pxg, on="ds", suffixes=("_rf", "_xgb"))
                             w_rf, w_xgb = rep["weights"]

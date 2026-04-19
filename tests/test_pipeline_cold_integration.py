@@ -105,3 +105,18 @@ def test_cold_pipeline_on_real_sku(tmp_path):
     parsed = json.loads(payload)
     assert parsed["sku"] == sku
     assert parsed["winning"]["exog"] == result.winning.exog
+
+    # REFIT regression: REFIT combinations must exist AND must differ from their PRE
+    # twin for at least one (exog, y_variant) — scripts/model_v3.py uses train-only
+    # history for REFIT recursive forecast, which changes the lag features even when
+    # the refit RF/XGB models are deterministic clones of the PRE finals. If this
+    # check fails, someone likely swapped hist_for_val for hist_min in the REFIT block
+    # of pipelines/cold.py.
+    pre = {(c.exog, c.y_variant): c.mae for c in result.combinations if c.phase == "PRE" and c.horizon == "Full"}
+    refit = {(c.exog, c.y_variant): c.mae for c in result.combinations if c.phase == "REFIT" and c.horizon == "Full"}
+    if refit:
+        distinct = [k for k in refit if k in pre and abs(refit[k] - pre[k]) > 1e-6]
+        assert distinct, (
+            "every REFIT combo's MAE matches its PRE twin — REFIT recursive forecast "
+            "likely uses the wrong history (should be hist_for_val, not hist_min)"
+        )
