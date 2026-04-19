@@ -6,4 +6,7 @@ xgboost
 prophet
 statsmodels
 joblib
-
+fastapi
+uvicorn[standard]
+pydantic
+structlog
