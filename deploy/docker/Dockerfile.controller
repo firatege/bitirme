@@ -1,0 +1,65 @@
+#
+# cargo-chef pattern (https://github.com/LukeMathWalker/cargo-chef):
+#   1. `planner` stage produces a recipe.json from Cargo.{toml,lock}.
+#   2. `cacher` stage builds only the dependency tree using that recipe — cached until
+#      the dep list changes, independent of source-file edits.
+#   3. `builder` stage copies the real source and compiles only application code.
+#   4. Runtime image is debian:trixie-slim + libssl3 + ca-certificates, matching
+#      Stockimg-AI's services/{auth,economy,…}/Dockerfile style.
+#
+FROM rust:1.95-bookworm AS chef
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        mold pkg-config libssl-dev \
+    && rm -rf /var/lib/apt/lists/* \
+    && cargo install cargo-chef --locked
+
+ENV RUSTFLAGS="-C link-arg=-fuse-ld=mold"
+WORKDIR /build
+
+# Planner: extract the dep graph into recipe.json.
+FROM chef AS planner
+COPY controller/Cargo.toml controller/Cargo.lock* /build/controller/
+COPY controller/src       /build/controller/src
+COPY controller/tests     /build/controller/tests
+COPY controller/migrations /build/controller/migrations
+WORKDIR /build/controller
+RUN cargo chef prepare --recipe-path /build/recipe.json
+
+# Cacher: build deps only. This layer is reused until recipe.json changes.
+FROM chef AS cacher
+COPY --from=planner /build/recipe.json /build/recipe.json
+WORKDIR /build/controller
+RUN cargo chef cook --release --recipe-path /build/recipe.json
+
+# Builder: real source, real binary.
+FROM chef AS builder
+COPY --from=cacher /build/controller/target /build/controller/target
+COPY --from=cacher $CARGO_HOME $CARGO_HOME
+COPY controller/Cargo.toml controller/Cargo.lock* /build/controller/
+COPY controller/src       /build/controller/src
+COPY controller/tests     /build/controller/tests
+COPY controller/migrations /build/controller/migrations
+WORKDIR /build/controller
+RUN cargo build --release --bin controller && \
+    cp target/release/controller /usr/local/bin/controller
+
+# Runtime.
+FROM debian:trixie-slim AS runtime
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        libssl3 ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+WORKDIR /app
+COPY --from=builder /usr/local/bin/controller /usr/local/bin/controller
+COPY controller/migrations /app/controller/migrations
+COPY panel_sales_orders_stock.csv /app/panel_sales_orders_stock.csv
+COPY sku_config.csv /app/sku_config.csv
+
+ENV MODEL_DIR=/app/models \
+    API_URL=http://api:8000 \
+    MAX_PARALLEL_JOBS=8 \
+    CONTROLLER_BIND=0.0.0.0:9000
+
+EXPOSE 9000
+ENTRYPOINT ["/usr/local/bin/controller"]
+CMD ["--help"]

@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+controller/target/
+node_modules/
+outputs/
+models/
+*.ipynb_checkpoints
+.git/
+.idea/
+.vscode/
+Archive.zip
+__MACOSX/
+.DS_Store

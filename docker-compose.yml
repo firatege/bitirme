@@ -1,0 +1,79 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: bitirme
+      POSTGRES_USER: bitirme
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-bitirme}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "bitirme"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  api:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.api
+    environment:
+      MODEL_DIR: /app/models
+      FAST_MODE: ${FAST_MODE:-True}
+      B_BOOT: ${B_BOOT:-150}
+      DRIFT_EPS: ${DRIFT_EPS:-0.20}
+      USE_GPU_XGB: ${USE_GPU_XGB:-False}
+    volumes:
+      - models_data:/app/models
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+    ports:
+      - "8000:8000"
+    deploy:
+      resources:
+        limits:
+          cpus: "8"
+          memory: 12g
+
+  controller:
+    build:
+      context: .
+      dockerfile: deploy/docker/Dockerfile.controller
+    environment:
+      DATABASE_URL: postgres://bitirme:${DB_PASSWORD:-bitirme}@postgres:5432/bitirme
+      API_URL: http://api:8000
+      MODEL_DIR: /app/models
+      MAX_PARALLEL_JOBS: ${MAX_PARALLEL_JOBS:-8}
+      RUST_LOG: ${RUST_LOG:-info,sqlx=warn}
+      CONTROLLER_BIND: 0.0.0.0:9000
+    volumes:
+      - models_data:/app/models:ro
+    ports:
+      - "9000:9000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    # Run the REST API. Admin tasks are done via:
+    #   docker compose exec controller controller seed --panel ... --config ...
+    #   docker compose exec controller controller backfill-cached-spec <sku>
+    # The `serve` subcommand auto-applies migrations on startup.
+    command: ["serve"]
+
+  adminer:
+    image: adminer
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  models_data:
