@@ -6,7 +6,7 @@ Working notes for Claude Code when operating in this repository. Read [`docs/PRO
 
 ## Project in one paragraph
 
-Turkish graduation thesis ("bitirme") project. Per-SKU monthly sales forecasting + automated purchase-order recommendation for a Motul-like lubricant distributor. The canonical production script is `model_v3.py`; it runs an 8-step pipeline per SKU (feature prep → ROCV grid search → EXOG probe/escalate → per-variable hybrid EXOG → recursive Y forecast → bootstrap PI → REFIT rollback → MOQ-constrained order policy). Input: `panel_sales_orders_stock.csv` + `sku_config.csv`. Output: `outputs/{SKU}/preds_*.csv` + `reorder_recommendation.json`.
+Turkish graduation thesis ("bitirme") project. Per-SKU monthly sales forecasting + automated purchase-order recommendation for a Motul-like lubricant distributor. The canonical production script is `scripts/model_v3.py`; it runs an 8-step pipeline per SKU (feature prep → ROCV grid search → EXOG probe/escalate → per-variable hybrid EXOG → recursive Y forecast → bootstrap PI → REFIT rollback → MOQ-constrained order policy). Input: `panel_sales_orders_stock.csv` + `sku_config.csv`. Output: `outputs/{SKU}/preds_*.csv` + `reorder_recommendation.json`.
 
 ---
 
@@ -14,9 +14,9 @@ Turkish graduation thesis ("bitirme") project. Per-SKU monthly sales forecasting
 
 | File | Role |
 |---|---|
-| `model_v3.py` | **Primary production script.** Latest, speed-pruned. Entry point: `main()` at line 1347. |
-| `model_v2.py` | Near-twin of v3 — differs only in ~10 config constants. Research-tuned (higher B_BOOT, time-decay NNLS on). |
-| `OMS.py` | Earlier standalone pipeline. No Probe→Escalate, no per-variable EXOG. Keep as reference, not production. |
+| `scripts/model_v3.py` | **Primary production script.** Latest, speed-pruned. Entry point: `main()` at line 1347. |
+| `scripts/model_v2.py` | Near-twin of v3 — differs only in ~10 config constants. Research-tuned (higher B_BOOT, time-decay NNLS on). |
+| `scripts/OMS.py` | Earlier standalone pipeline. No Probe→Escalate, no per-variable EXOG. Keep as reference, not production. |
 | `Sales Forecast v7_full.ipynb` | Latest research notebook (v7). Not superseded. |
 | `panel_sales_orders_stock.csv` | Canonical input panel: `ds, sku, y, orders, stock`. |
 | `sku_config.csv` | Per-SKU policy: `T_CHECK, H_COVER, q_target, lead_time_mo, MOQ, lot_size`. |
@@ -28,7 +28,7 @@ Turkish graduation thesis ("bitirme") project. Per-SKU monthly sales forecasting
 
 ## Where NOT to look
 
-The repo root contains **dozens of archival Jupyter notebooks** from Phases 1–4 of development (single-SKU experiments on `303-104092`, Auto-Exog explorations, Sales Forecast v2–v6 iterations, `Untitled*.ipynb`). They are superseded by `model_v3.py` + `Sales Forecast v7_full.ipynb`. `.claudeignore` excludes them. Do not load them into context unless the user explicitly asks about a specific notebook.
+The repo root contains **dozens of archival Jupyter notebooks** from Phases 1–4 of development (single-SKU experiments on `303-104092`, Auto-Exog explorations, Sales Forecast v2–v6 iterations, `Untitled*.ipynb`). They are superseded by `scripts/model_v3.py` + `Sales Forecast v7_full.ipynb`. `.claudeignore` excludes them. Do not load them into context unless the user explicitly asks about a specific notebook.
 
 Also excluded:
 - `outputs/` — derived per-SKU forecast artifacts (thousands of CSVs + PNGs)
@@ -47,7 +47,7 @@ raw → panel_sales_orders_stock.csv → [model_v3.run_for_sku per SKU] → outp
                                                 └── reorder_recommendation.json
 ```
 
-Inside `run_for_sku` (`model_v3.py:983`):
+Inside `run_for_sku` (`scripts/model_v3.py:983`):
 
 1. `prep_features_y` — lags (y_lag1, orders_lag1/3, stock_lag1/3), calendar, winsorize
 2. `optimize_rf_rocv` + `optimize_xgb_rocv` — ROCV grid search on train+val
@@ -69,7 +69,7 @@ Inside `run_for_sku` (`model_v3.py:983`):
 - **NNLS weights are non-negative and project onto the simplex.** `project_simplex` + `nnls_ridge`. Do not replace with unconstrained least squares.
 - **REFIT rollback is conservative.** If `ref_best > pre_best` → keep PRE. Do not flip the comparison.
 - **`panel_sales_orders_stock.csv` exists in two locations** — repo root and `mnt/data/`. Keep them in sync if you regenerate the panel.
-- **`model_v2.py` and `model_v3.py` drift freely.** A bug fix in one does not propagate — apply fixes to both, or ask the user which one is authoritative.
+- **`scripts/model_v2.py` and `scripts/model_v3.py` drift freely.** A bug fix in one does not propagate — apply fixes to both, or ask the user which one is authoritative.
 
 ---
 
@@ -77,10 +77,10 @@ Inside `run_for_sku` (`model_v3.py:983`):
 
 (Do not silently clean these up — flag to user first.)
 
-- **`val_mae_exog_for_col` is defined twice** in `model_v3.py` (lines 899 and 909). The first is dead. Lines 848–897 are broken refactoring attempts left as dead code. Only the line 909 version executes.
-- **`choose_methods_for_sku`** (`model_v3.py:964`) is never called. `run_for_sku` inlines the logic.
+- **`val_mae_exog_for_col` is defined twice** in `scripts/model_v3.py` (lines 899 and 909). The first is dead. Lines 848–897 are broken refactoring attempts left as dead code. Only the line 909 version executes.
+- **`choose_methods_for_sku`** (`scripts/model_v3.py:964`) is never called. `run_for_sku` inlines the logic.
 - **v2 and v3 are near-identical**. Changes must be applied to both files manually.
-- **OMS.py's `ENABLE_*_ENSEMBLES` flags only gate file output**, not computation. Expensive loops run even when flags are `False`.
+- **scripts/OMS.py's `ENABLE_*_ENSEMBLES` flags only gate file output**, not computation. Expensive loops run even when flags are `False`.
 
 ---
 
@@ -88,23 +88,23 @@ Inside `run_for_sku` (`model_v3.py:983`):
 
 ### "Run forecasting for all SKUs"
 ```
-python model_v3.py
+python scripts/model_v3.py
 ```
 Outputs land in `outputs/{SKU}/`.
 
 ### "Add a new SKU to the pipeline"
 1. Add rows to `panel_sales_orders_stock.csv` (and `mnt/data/panel_sales_orders_stock.csv`)
 2. Add a row to `sku_config.csv` with MOQ, lot size, H_COVER, q_target
-3. Rerun `python model_v3.py`
+3. Rerun `python scripts/model_v3.py`
 
 ### "Change the forecast horizon or test window"
-Constants at the top of `model_v3.py` (lines 1–155): `TEST_START`, `TEST_END`, `TEST_END_SHORT`, `H_COVER` (per-SKU overridden by `sku_config.csv`).
+Constants at the top of `scripts/model_v3.py` (lines 1–155): `TEST_START`, `TEST_END`, `TEST_END_SHORT`, `H_COVER` (per-SKU overridden by `sku_config.csv`).
 
 ### "Tune for speed"
 See `FAST_MODE`, `B_BOOT`, `ADAPT_WINS`, `IM_METHODS` in the v3 config block. v3 is already speed-pruned vs v2; further pruning should go through v3.
 
 ### "Add a new EXOG forecasting method"
-1. Implement `build_exog_<name>` mirroring `build_exog_univar` signature in `model_v3.py:270–476`
+1. Implement `build_exog_<name>` mirroring `build_exog_univar` signature in `scripts/model_v3.py:270–476`
 2. Register it in `_build_exog_by_method` (~line 838)
 3. Add the name to `PROBE_METHODS` or `ESCALATE_METHODS`
 4. Update `choose_best_exog_per_var` if the new method should compete per-variable
@@ -116,7 +116,7 @@ See `FAST_MODE`, `B_BOOT`, `ADAPT_WINS`, `IM_METHODS` in the v3 config block. v3
 - **Match the existing Python style.** No type annotations, no dataclasses, heavy use of module-level config constants, functions named with underscores, `main()` at the bottom.
 - **Do not introduce a package structure** (`src/`, `__init__.py`, `setup.py`) unless asked. This is a thesis repo, not a library.
 - **Do not add `requirements.txt` or `pyproject.toml`** unless asked — inspect imports and use `pip install` ad-hoc as the user has been doing.
-- **Prefer editing `model_v3.py` over creating new modules.** The user's mental model is "one script per version".
+- **Prefer editing `scripts/model_v3.py` over creating new modules.** The user's mental model is "one script per version".
 - **Keep Turkish comments where they already exist.** `proje_ozeti.md` and inline comments are bilingual by design.
 - **Do not rename files or move archival notebooks** without explicit permission. Many have reference value for the thesis.
 
@@ -124,7 +124,7 @@ See `FAST_MODE`, `B_BOOT`, `ADAPT_WINS`, `IM_METHODS` in the v3 config block. v3
 
 ## When the user asks a question
 
-- For questions about "how does X work" → read from `model_v3.py` first (not v2, not OMS, not notebooks).
+- For questions about "how does X work" → read from `scripts/model_v3.py` first (not v2, not OMS, not notebooks).
 - For questions about the thesis narrative / "why we did it this way" → read from `proje_ozeti.md`.
 - For questions about past experiments / "what did we try before" → read from the notebook file whose name matches the phase the user is asking about; only load one at a time, they are huge.
 - For questions about output artifacts → the naming convention is `preds_{Horizon}_{EnsembleMethod}_{YVariant}[_REFIT].csv`. See `PROJECT_OVERVIEW.md` §6 for the decoding table.

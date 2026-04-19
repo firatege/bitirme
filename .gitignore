@@ -40,3 +40,13 @@ env/
 venv/
 .env/
 .venv/
+.pytest_cache/
+
+# Rust build artefaktları
+controller/target/
+
+# Lokal blob store (prod'da Docker volume kullanılıyor)
+models/
+
+# Yerel .env (.env.example commit ediliyor)
+.env

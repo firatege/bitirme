@@ -47,9 +47,11 @@ bitirme/
 │   ├── PROJECT_OVERVIEW_TR.md          # Turkish translation
 │   └── CLAUDE_TR.md                    # Turkish translation of CLAUDE.md (reference)
 │
-├── model_v3.py         (1416 lines)    # PRIMARY production script — latest
-├── model_v2.py         (1417 lines)    # Near-twin of v3, research-tuned constants
-├── OMS.py              (1237 lines)    # Earlier standalone pipeline (prototype)
+├── scripts/
+│   ├── __init__.py
+│   ├── model_v3.py     (1416 lines)    # PRIMARY production script — latest
+│   ├── model_v2.py     (1417 lines)    # Near-twin of v3, research-tuned constants
+│   └── OMS.py          (1237 lines)    # Earlier standalone pipeline (prototype)
 │
 ├── Sales Forecast v7_full.ipynb        # Latest research notebook (v7, ~1.7 MB)
 │
@@ -87,13 +89,13 @@ bitirme/
 └── Archive.zip                         # (ignore)
 ```
 
-**Dozens of archival Jupyter notebooks** (Phase 1–4; see §5) sit in the repo root. They document the evolution from a single-SKU experiment (`303-104092`) through exogenous ensemble exploration, NNLS blending, multi-SKU parallelization, REFIT rollback, and intermittent demand handling. They are superseded by `model_v3.py` + `Sales Forecast v7_full.ipynb` and are listed in `.claudeignore` to keep the context window clean.
+**Dozens of archival Jupyter notebooks** (Phase 1–4; see §5) sit in the repo root. They document the evolution from a single-SKU experiment (`303-104092`) through exogenous ensemble exploration, NNLS blending, multi-SKU parallelization, REFIT rollback, and intermittent demand handling. They are superseded by `scripts/model_v3.py` + `Sales Forecast v7_full.ipynb` and are listed in `.claudeignore` to keep the context window clean.
 
 ---
 
-## 4. Primary Module: `model_v3.py`
+## 4. Primary Module: `scripts/model_v3.py`
 
-`model_v3.py` is the canonical production entry point. Run with `python model_v3.py` to produce forecasts + order recommendations for every SKU in `panel_sales_orders_stock.csv`.
+`scripts/model_v3.py` is the canonical production entry point. Run with `python scripts/model_v3.py` to produce forecasts + order recommendations for every SKU in `panel_sales_orders_stock.csv`.
 
 ### 4.1 Top-level layout
 
@@ -138,7 +140,7 @@ bitirme/
 
 Dual-mode execution:
 
-- **CLI (`python model_v3.py`)** — `ProcessPoolExecutor(mp.get_context("spawn"))`, one SKU per worker, `MAX_WORKERS = int(cpu_count * 0.75)`.
+- **CLI (`python scripts/model_v3.py`)** — `ProcessPoolExecutor(mp.get_context("spawn"))`, one SKU per worker, `MAX_WORKERS = int(cpu_count * 0.75)`.
 - **Jupyter / interactive** — detected via `IS_INTERACTIVE` flag, falls back to `ThreadPoolExecutor` (spawn doesn't survive notebook reloads).
 - `PARALLEL_SKU = False` by default in v3 (on in v2/OMS) — the latest iteration runs serially by default and opts in explicitly.
 
@@ -154,7 +156,7 @@ Dual-mode execution:
 | 4 | Multi-SKU parallelization + REFIT + intermittent | `Sales Forecast V6_multi_sku*.ipynb`, `v6_multi_sku.py — OMS Edition*.ipynb` |
 | 5 | **Current** — v7 full production run | `Sales Forecast v7_full.ipynb` (latest) |
 
-Phases 1–4 are archival. Live artifacts are `model_v3.py`, `OMS.py`, and `Sales Forecast v7_full.ipynb`.
+Phases 1–4 are archival. Live artifacts are `scripts/model_v3.py`, `scripts/OMS.py`, and `Sales Forecast v7_full.ipynb`.
 
 ---
 
@@ -211,7 +213,7 @@ Prediction CSV columns: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
                                │
                                ▼
    ┌──────────────────────────────────────────────────────────┐
-   │                    model_v3.py :: main                   │
+   │              scripts/model_v3.py :: main                 │
    │                                                          │
    │   for each SKU (parallel optional):                      │
    │       run_for_sku(sku_df, sku_params)                    │
@@ -271,10 +273,10 @@ Prediction CSV columns: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 - **REFIT + rollback.** After initial training/eval split, models retrain on train + val. If the refit result is *worse* than pre-refit (measured on the test window), the pre-refit result is kept. Prevents overfitting to recent noise.
 
 **Known code-health issues (to investigate before refactoring):**
-- ⚠ `val_mae_exog_for_col` is **defined twice** in `model_v3.py` (lines 899 and 909). The first definition is shadowed and dead. Lines 848–897 contain five prior broken attempts (`_val_mae_exog_col`, `_val_mae_col_clean`, …) left in place as commented-out dead code. The final (line 909) definition does work correctly, but this block is the main readability hazard in the file.
+- ⚠ `val_mae_exog_for_col` is **defined twice** in `scripts/model_v3.py` (lines 899 and 909). The first definition is shadowed and dead. Lines 848–897 contain five prior broken attempts (`_val_mae_exog_col`, `_val_mae_col_clean`, …) left in place as commented-out dead code. The final (line 909) definition does work correctly, but this block is the main readability hazard in the file.
 - ⚠ `choose_methods_for_sku` (line 964) is never called — `run_for_sku` inlines its logic instead.
-- ⚠ `model_v2.py` and `model_v3.py` are near-identical — they differ only in ~10 config constants (`B_BOOT`, `ADAPT_WINS`, `ENABLE_TIME_DECAY_NNLS`, `IM_METHODS`, `FAST_MODE`, `PARALLEL_SKU`). v3 is the speed-pruned variant of v2. Any logic fix must be applied manually to both.
-- ⚠ `OMS.py`'s `ENABLE_INV_ENSEMBLES` / `ENABLE_NNLS_ENSEMBLES` flags (False by default) only gate file output, not computation — the adaptive NNLS block at lines 846–876 runs unconditionally, wasting CPU.
+- ⚠ `scripts/model_v2.py` and `scripts/model_v3.py` are near-identical — they differ only in ~10 config constants (`B_BOOT`, `ADAPT_WINS`, `ENABLE_TIME_DECAY_NNLS`, `IM_METHODS`, `FAST_MODE`, `PARALLEL_SKU`). v3 is the speed-pruned variant of v2. Any logic fix must be applied manually to both.
+- ⚠ `scripts/OMS.py`'s `ENABLE_INV_ENSEMBLES` / `ENABLE_NNLS_ENSEMBLES` flags (False by default) only gate file output, not computation — the adaptive NNLS block at lines 846–876 runs unconditionally, wasting CPU.
 - ⚠ Jupyter notebooks from Phases 1–4 (dozens of files) are committed in the repo root and heavily overlap — consider archiving to an `archive/` subfolder in a future cleanup pass.
 
 ---
@@ -283,8 +285,8 @@ Prediction CSV columns: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 
 | Goal | File | Command |
 |---|---|---|
-| Run the full pipeline for all SKUs | `model_v3.py` | `python model_v3.py` |
-| Reference implementation (no Probe/Escalate) | `OMS.py` | `python OMS.py` |
+| Run the full pipeline for all SKUs | `scripts/model_v3.py` | `python scripts/model_v3.py` |
+| Reference implementation (no Probe/Escalate) | `scripts/OMS.py` | `python scripts/OMS.py` |
 | Research / thesis walkthrough | `Sales Forecast v7_full.ipynb` | Open in Jupyter |
 | Recreate the panel from raw data | `veri hazırlama.ipynb` | Open in Jupyter |
 
@@ -294,13 +296,13 @@ Prediction CSV columns: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 
 Ordered by importance:
 
-1. `model_v3.py:983` — `run_for_sku` (master pipeline)
-2. `model_v3.py:709` — `recursive_forward_predict_y` (Y forecast loop)
-3. `model_v3.py:731` — `add_bootstrap_intervals` (PI construction)
-4. `model_v3.py:909` — `val_mae_exog_for_col` (second, live definition)
-5. `model_v3.py:928` — `choose_best_exog_per_var` (per-variable hybrid)
-6. `model_v3.py:676` — `optimize_rf_rocv` (ROCV grid search)
-7. `model_v3.py:441` — `fit_nnls_weights_on_val` (stacking weights)
-8. `model_v3.py:586` — `select_intermittent` (sparse/dense routing)
-9. `model_v3.py:1347` — `main` (panel load + parallel dispatch)
-10. `OMS.py:715` — reference `run_for_sku` without Probe→Escalate (compare against v3 to understand what the newer routing replaced)
+1. `scripts/model_v3.py:983` — `run_for_sku` (master pipeline)
+2. `scripts/model_v3.py:709` — `recursive_forward_predict_y` (Y forecast loop)
+3. `scripts/model_v3.py:731` — `add_bootstrap_intervals` (PI construction)
+4. `scripts/model_v3.py:909` — `val_mae_exog_for_col` (second, live definition)
+5. `scripts/model_v3.py:928` — `choose_best_exog_per_var` (per-variable hybrid)
+6. `scripts/model_v3.py:676` — `optimize_rf_rocv` (ROCV grid search)
+7. `scripts/model_v3.py:441` — `fit_nnls_weights_on_val` (stacking weights)
+8. `scripts/model_v3.py:586` — `select_intermittent` (sparse/dense routing)
+9. `scripts/model_v3.py:1347` — `main` (panel load + parallel dispatch)
+10. `scripts/OMS.py:715` — reference `run_for_sku` without Probe→Escalate (compare against v3 to understand what the newer routing replaced)

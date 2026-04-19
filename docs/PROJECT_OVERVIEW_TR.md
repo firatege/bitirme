@@ -47,9 +47,11 @@ bitirme/
 │   ├── PROJECT_OVERVIEW_TR.md          # Bu dosya
 │   └── CLAUDE_TR.md                    # CLAUDE.md'in Türkçe çevirisi (referans)
 │
-├── model_v3.py         (1416 satır)    # BİRİNCİL üretim scripti — en güncel
-├── model_v2.py         (1417 satır)    # v3'ün yakın ikizi, araştırma-ayarlı sabitler
-├── OMS.py              (1237 satır)    # Önceki bağımsız pipeline (prototip)
+├── scripts/
+│   ├── __init__.py
+│   ├── model_v3.py     (1416 satır)    # BİRİNCİL üretim scripti — en güncel
+│   ├── model_v2.py     (1417 satır)    # v3'ün yakın ikizi, araştırma-ayarlı sabitler
+│   └── OMS.py          (1237 satır)    # Önceki bağımsız pipeline (prototip)
 │
 ├── Sales Forecast v7_full.ipynb        # En güncel araştırma notebook'u (v7, ~1.7 MB)
 │
@@ -87,13 +89,13 @@ bitirme/
 └── Archive.zip                         # (yok say)
 ```
 
-**Kök dizinde düzinelerce arşiv Jupyter notebook** (Faz 1–4; bkz. §5) bulunmaktadır. Tek bir SKU deneyinden (`303-104092`) başlayarak dışsal topluluk keşfi, NNLS karıştırma, çoklu-SKU paralelleştirme, REFIT rollback ve kesintili talep işleme evrimini belgeliyorlar. Artık `model_v3.py` + `Sales Forecast v7_full.ipynb` tarafından yerine geçilmişlerdir ve context penceresini temiz tutmak için `.claudeignore` ile hariç tutulurlar.
+**Kök dizinde düzinelerce arşiv Jupyter notebook** (Faz 1–4; bkz. §5) bulunmaktadır. Tek bir SKU deneyinden (`303-104092`) başlayarak dışsal topluluk keşfi, NNLS karıştırma, çoklu-SKU paralelleştirme, REFIT rollback ve kesintili talep işleme evrimini belgeliyorlar. Artık `scripts/model_v3.py` + `Sales Forecast v7_full.ipynb` tarafından yerine geçilmişlerdir ve context penceresini temiz tutmak için `.claudeignore` ile hariç tutulurlar.
 
 ---
 
-## 4. Birincil Modül: `model_v3.py`
+## 4. Birincil Modül: `scripts/model_v3.py`
 
-`model_v3.py` kanonik üretim giriş noktasıdır. `python model_v3.py` ile çalıştırıldığında `panel_sales_orders_stock.csv`'deki her SKU için tahmin + sipariş önerisi üretir.
+`scripts/model_v3.py` kanonik üretim giriş noktasıdır. `python scripts/model_v3.py` ile çalıştırıldığında `panel_sales_orders_stock.csv`'deki her SKU için tahmin + sipariş önerisi üretir.
 
 ### 4.1 Üst seviye yerleşim
 
@@ -138,7 +140,7 @@ bitirme/
 
 Çift modlu çalıştırma:
 
-- **CLI (`python model_v3.py`)** — `ProcessPoolExecutor(mp.get_context("spawn"))`, worker başına bir SKU, `MAX_WORKERS = int(cpu_count * 0.75)`.
+- **CLI (`python scripts/model_v3.py`)** — `ProcessPoolExecutor(mp.get_context("spawn"))`, worker başına bir SKU, `MAX_WORKERS = int(cpu_count * 0.75)`.
 - **Jupyter / interaktif** — `IS_INTERACTIVE` bayrağı ile tespit, `ThreadPoolExecutor`'a düşer (spawn notebook yeniden yüklemelerinde hayatta kalmıyor).
 - v3'te `PARALLEL_SKU = False` varsayılan (v2/OMS'de açık) — en güncel iterasyon varsayılan olarak seri çalışır, paralellik açıkça devreye alınır.
 
@@ -154,7 +156,7 @@ bitirme/
 | 4 | Çoklu-SKU paralelleştirme + REFIT + kesintili | `Sales Forecast V6_multi_sku*.ipynb`, `v6_multi_sku.py — OMS Edition*.ipynb` |
 | 5 | **Güncel** — v7 tam üretim çalıştırması | `Sales Forecast v7_full.ipynb` (en son) |
 
-Faz 1–4 arşivsel. Canlı artefaktlar: `model_v3.py`, `OMS.py` ve `Sales Forecast v7_full.ipynb`.
+Faz 1–4 arşivsel. Canlı artefaktlar: `scripts/model_v3.py`, `scripts/OMS.py` ve `Sales Forecast v7_full.ipynb`.
 
 ---
 
@@ -211,7 +213,7 @@ Tahmin CSV sütunları: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
                                │
                                ▼
    ┌──────────────────────────────────────────────────────────┐
-   │                    model_v3.py :: main                   │
+   │              scripts/model_v3.py :: main                 │
    │                                                          │
    │   her SKU için (paralel opsiyonel):                      │
    │       run_for_sku(sku_df, sku_params)                    │
@@ -271,10 +273,10 @@ Tahmin CSV sütunları: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 - **REFIT + rollback.** İlk eğitim/değerlendirme ayrımından sonra modeller train + val üzerinde yeniden eğitilir. Refit sonucu pre-refit sonucundan (test penceresi üzerinde ölçülerek) *daha kötüyse*, pre-refit sonucu saklanır. Yakın dönem gürültüye overfit etmeyi önler.
 
 **Bilinen kod-sağlık sorunları (refaktör etmeden önce araştır):**
-- ⚠ `val_mae_exog_for_col` `model_v3.py` içinde **iki kez tanımlı** (satır 899 ve 909). İlki gölgelenmiş ve ölü. Satır 848–897 arasında önceki 5 bozuk refactoring denemesi (`_val_mae_exog_col`, `_val_mae_col_clean`, …) ölü kod olarak bırakılmış. Sadece satır 909'daki son tanım doğru çalışıyor, ama bu blok dosyadaki ana okunabilirlik tehlikesi.
+- ⚠ `val_mae_exog_for_col` `scripts/model_v3.py` içinde **iki kez tanımlı** (satır 899 ve 909). İlki gölgelenmiş ve ölü. Satır 848–897 arasında önceki 5 bozuk refactoring denemesi (`_val_mae_exog_col`, `_val_mae_col_clean`, …) ölü kod olarak bırakılmış. Sadece satır 909'daki son tanım doğru çalışıyor, ama bu blok dosyadaki ana okunabilirlik tehlikesi.
 - ⚠ `choose_methods_for_sku` (satır 964) asla çağrılmıyor — `run_for_sku` mantığı inline olarak içerir.
-- ⚠ `model_v2.py` ve `model_v3.py` neredeyse ikiz — sadece ~10 config sabitinde farklılar (`B_BOOT`, `ADAPT_WINS`, `ENABLE_TIME_DECAY_NNLS`, `IM_METHODS`, `FAST_MODE`, `PARALLEL_SKU`). v3, v2'nin hız-budanmış varyantı. Herhangi bir mantık düzeltmesi her iki dosyaya elle uygulanmalı.
-- ⚠ `OMS.py`'deki `ENABLE_INV_ENSEMBLES` / `ENABLE_NNLS_ENSEMBLES` bayrakları (varsayılan False) sadece dosya çıktısını kontrol eder, hesaplamayı değil — 846–876 satırlarındaki adaptif NNLS bloğu koşulsuz çalışır, CPU'yu boşa harcar.
+- ⚠ `scripts/model_v2.py` ve `scripts/model_v3.py` neredeyse ikiz — sadece ~10 config sabitinde farklılar (`B_BOOT`, `ADAPT_WINS`, `ENABLE_TIME_DECAY_NNLS`, `IM_METHODS`, `FAST_MODE`, `PARALLEL_SKU`). v3, v2'nin hız-budanmış varyantı. Herhangi bir mantık düzeltmesi her iki dosyaya elle uygulanmalı.
+- ⚠ `scripts/OMS.py`'deki `ENABLE_INV_ENSEMBLES` / `ENABLE_NNLS_ENSEMBLES` bayrakları (varsayılan False) sadece dosya çıktısını kontrol eder, hesaplamayı değil — 846–876 satırlarındaki adaptif NNLS bloğu koşulsuz çalışır, CPU'yu boşa harcar.
 - ⚠ Faz 1–4'ten gelen Jupyter notebook'lar (düzinelerce dosya) repo kökünde commit edilmiş ve çok üst üste — gelecekteki bir temizlik geçişinde `archive/` alt klasörüne arşivlemeyi düşün.
 
 ---
@@ -283,8 +285,8 @@ Tahmin CSV sütunları: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 
 | Amaç | Dosya | Komut |
 |---|---|---|
-| Tüm SKU'lar için pipeline'ı çalıştır | `model_v3.py` | `python model_v3.py` |
-| Referans uygulama (Probe/Escalate'siz) | `OMS.py` | `python OMS.py` |
+| Tüm SKU'lar için pipeline'ı çalıştır | `scripts/model_v3.py` | `python scripts/model_v3.py` |
+| Referans uygulama (Probe/Escalate'siz) | `scripts/OMS.py` | `python scripts/OMS.py` |
 | Araştırma / tez anlatımı | `Sales Forecast v7_full.ipynb` | Jupyter'da aç |
 | Paneli ham veriden yeniden oluştur | `veri hazırlama.ipynb` | Jupyter'da aç |
 
@@ -294,13 +296,13 @@ Tahmin CSV sütunları: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
 
 Önem sırasıyla:
 
-1. `model_v3.py:983` — `run_for_sku` (ana pipeline)
-2. `model_v3.py:709` — `recursive_forward_predict_y` (Y tahmin döngüsü)
-3. `model_v3.py:731` — `add_bootstrap_intervals` (PI oluşturma)
-4. `model_v3.py:909` — `val_mae_exog_for_col` (ikinci, canlı tanım)
-5. `model_v3.py:928` — `choose_best_exog_per_var` (değişken bazlı hibrit)
-6. `model_v3.py:676` — `optimize_rf_rocv` (ROCV grid search)
-7. `model_v3.py:441` — `fit_nnls_weights_on_val` (stacking ağırlıkları)
-8. `model_v3.py:586` — `select_intermittent` (seyrek/yoğun yönlendirme)
-9. `model_v3.py:1347` — `main` (panel yükleme + paralel dispatch)
-10. `OMS.py:715` — Probe→Escalate'siz referans `run_for_sku` (yeni yönlendirmenin neyin yerini aldığını anlamak için v3 ile karşılaştır)
+1. `scripts/model_v3.py:983` — `run_for_sku` (ana pipeline)
+2. `scripts/model_v3.py:709` — `recursive_forward_predict_y` (Y tahmin döngüsü)
+3. `scripts/model_v3.py:731` — `add_bootstrap_intervals` (PI oluşturma)
+4. `scripts/model_v3.py:909` — `val_mae_exog_for_col` (ikinci, canlı tanım)
+5. `scripts/model_v3.py:928` — `choose_best_exog_per_var` (değişken bazlı hibrit)
+6. `scripts/model_v3.py:676` — `optimize_rf_rocv` (ROCV grid search)
+7. `scripts/model_v3.py:441` — `fit_nnls_weights_on_val` (stacking ağırlıkları)
+8. `scripts/model_v3.py:586` — `select_intermittent` (seyrek/yoğun yönlendirme)
+9. `scripts/model_v3.py:1347` — `main` (panel yükleme + paralel dispatch)
+10. `scripts/OMS.py:715` — Probe→Escalate'siz referans `run_for_sku` (yeni yönlendirmenin neyin yerini aldığını anlamak için v3 ile karşılaştır)
