@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS forecast_jobs;
+DROP TABLE IF EXISTS sku_run_recommendation;
+DROP TABLE IF EXISTS sku_run_val_residuals;
+DROP TABLE IF EXISTS sku_run_exog_selection;
+DROP TABLE IF EXISTS sku_run_models;
+DROP TABLE IF EXISTS sku_run_combinations;
+DROP TABLE IF EXISTS sku_runs;
+DROP TABLE IF EXISTS forecast_runs;
+DROP TABLE IF EXISTS sku_config;
+DROP TABLE IF EXISTS sales_panel;

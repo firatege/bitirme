@@ -1,0 +1,10 @@
+DROP TYPE IF EXISTS job_status;
+DROP TYPE IF EXISTS model_slot;
+DROP TYPE IF EXISTS exog_column;
+DROP TYPE IF EXISTS column_target;
+DROP TYPE IF EXISTS y_variant_kind;
+DROP TYPE IF EXISTS phase_kind;
+DROP TYPE IF EXISTS horizon_kind;
+DROP TYPE IF EXISTS sku_run_mode;
+DROP TYPE IF EXISTS sku_run_status;
+DROP TYPE IF EXISTS run_status;

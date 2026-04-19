@@ -1,0 +1,43 @@
+[package]
+name = "controller"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Phase 2: sqlx only for migrations + queries. SeaORM entities are deferred until
+# the warm-run cached_spec join queries (Phase 3) benefit from the entity layer;
+# `sea-orm-cli generate entity` at that point produces src/entities/. The 2.0.0-rc.18
+# release ships with a sea-query feature-flag mismatch (`with_array` resolution failure
+# on Rust 1.94), so we'll pin carefully when we re-add it.
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio",
+    "postgres",
+    "macros",
+    "migrate",
+    "time",
+    "json",
+] }
+tokio = { version = "1", features = ["full"] }
+reqwest = { version = "0.12", features = ["json"] }
+clap = { version = "4", features = ["derive", "env"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+anyhow = "1"
+thiserror = "1"
+time = { version = "0.3", features = ["serde", "macros", "parsing"] }
+csv = "1"
+futures = "0.3"
+urlencoding = "2.1"
+# HTTP server — match Stockimg-AI public-api pattern (actix-web + actix-cors).
+actix-web = "4.10"
+actix-cors = "0.7"
+
+[lib]
+name = "controller"
+path = "src/lib.rs"
+
+[[bin]]
+name = "controller"
+path = "src/main.rs"
