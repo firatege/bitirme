@@ -1,0 +1,80 @@
+import { useParams, Link } from 'react-router-dom';
+import { useSkuHistory, useSkuLatest } from '@/shared/api/hooks';
+import { Skeleton } from '@/shared/ui/Skeleton';
+import { ErrorState } from '@/shared/ui/ErrorState';
+import { EmptyState } from '@/shared/ui/EmptyState';
+import { UrgencyBadge } from '@/features/sku-list/UrgencyBadge';
+import { urgencyOf } from '@/entities/sku/selectors';
+import { OrderBreakdownCard } from '@/features/sku-detail/OrderBreakdownCard';
+import { ModelProvenancePanel } from '@/features/sku-detail/ModelProvenancePanel';
+import { StockoutGauge } from '@/features/sku-detail/StockoutGauge';
+import { HistoryChart } from '@/features/sku-detail/HistoryChart';
+
+export function SkuDetailPage() {
+  const { sku = '' } = useParams<{ sku: string }>();
+  const latest = useSkuLatest(sku);
+  const history = useSkuHistory(sku);
+
+  if (latest.isLoading)
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-64" />
+        <div className="grid grid-cols-3 gap-4">
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+          <Skeleton className="h-64" />
+        </div>
+      </div>
+    );
+
+  if (latest.isError)
+    return (
+      <ErrorState
+        title="SKU yüklenemedi"
+        message={latest.error instanceof Error ? latest.error.message : ''}
+        onRetry={() => latest.refetch()}
+      />
+    );
+
+  const detail = latest.data;
+  if (!detail)
+    return (
+      <EmptyState
+        title="Bu SKU için sonuç yok"
+        description="Önce bir run tetikleyin."
+      />
+    );
+
+  const level = urgencyOf(detail.winning);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Link
+          to="/"
+          className="text-xs text-slate-500 hover:text-slate-800"
+        >
+          ← Geri
+        </Link>
+        <h1 className="font-mono text-xl text-slate-900">{sku}</h1>
+        <UrgencyBadge level={level} />
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        {detail.recommendation && (
+          <OrderBreakdownCard sku={sku} recommendation={detail.recommendation} />
+        )}
+        <StockoutGauge
+          p3m={detail.winning?.p_stockout_3m}
+          p6m={detail.winning?.p_stockout_6m}
+          eT={detail.winning?.e_t_stockout_mo}
+        />
+        {detail.winning && <ModelProvenancePanel win={detail.winning} />}
+      </div>
+
+      {history.data && history.data.history.length > 0 && (
+        <HistoryChart entries={history.data.history} />
+      )}
+    </div>
+  );
+}

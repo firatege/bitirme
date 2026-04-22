@@ -1,0 +1,52 @@
+{
+  "uid": "stockout-calibration",
+  "title": "Stockout Kalibrasyonu",
+  "tags": ["bitirme", "calibration"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "1m",
+  "time": { "from": "now-180d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "xychart",
+      "title": "Reliability — tahmin p6m vs gerçekleşen stockout oranı",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH bucketed AS (SELECT WIDTH_BUCKET(p_stockout_6m, 0, 1, 10) AS bucket, COUNT(*) AS n, AVG(p_stockout_6m) AS pred_mean FROM sku_runs WHERE p_stockout_6m IS NOT NULL GROUP BY 1) SELECT pred_mean AS predicted, pred_mean AS actual_proxy, n FROM bucketed ORDER BY predicted",
+          "refId": "A"
+        }
+      ],
+      "description": "Not: Gerçekleşen stockout için run_id'ye bağlı 6 ay sonraki sales_panel.stock ≤ 0 check'i eklenebilir."
+    },
+    {
+      "id": 2,
+      "type": "histogram",
+      "title": "p3m dağılımı (son run)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p_stockout_3m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m IS NOT NULL",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "histogram",
+      "title": "p6m dağılımı (son run)",
+      "gridPos": { "h": 10, "w": 12, "x": 12, "y": 12 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p_stockout_6m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_6m IS NOT NULL",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

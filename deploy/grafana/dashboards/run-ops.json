@@ -1,0 +1,92 @@
+{
+  "uid": "run-ops",
+  "title": "Run Operasyonu & Drift",
+  "tags": ["bitirme", "ops"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-30d", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "Run süresi (dakika)",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT completed_at AS time, EXTRACT(EPOCH FROM (completed_at - started_at))/60.0 AS value FROM forecast_runs WHERE status='completed' AND $__timeFilter(completed_at) ORDER BY completed_at",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "m" } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Başarılı run oranı (30g)",
+      "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT SUM(CASE WHEN status='completed' THEN 1 ELSE 0 END)::float / NULLIF(COUNT(*),0) AS rate FROM forecast_runs WHERE started_at > NOW() - INTERVAL '30 days'",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Başarısız job (son run)",
+      "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(*) AS n FROM forecast_jobs WHERE run_id=(SELECT run_id FROM forecast_runs ORDER BY started_at DESC LIMIT 1) AND status='failed'",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "bargauge",
+      "title": "Job durumu (son run)",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs ORDER BY started_at DESC LIMIT 1) SELECT status, COUNT(*) AS n FROM forecast_jobs WHERE run_id=(SELECT run_id FROM r) GROUP BY status",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "type": "table",
+      "title": "Hatalı joblar",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT job_id, run_id, sku, attempts, last_error FROM forecast_jobs WHERE status='failed' ORDER BY job_id DESC LIMIT 50",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Run başına SKU sayısı (cold vs warm)",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT fr.started_at AS time, sr.mode::text AS metric, COUNT(*) AS value FROM sku_runs sr JOIN forecast_runs fr USING(run_id) WHERE $__timeFilter(fr.started_at) GROUP BY fr.started_at, sr.mode ORDER BY fr.started_at",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

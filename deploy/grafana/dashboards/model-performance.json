@@ -1,0 +1,84 @@
+{
+  "uid": "model-performance",
+  "title": "Model Performans Trendi",
+  "tags": ["bitirme", "model"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-90d", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "sku",
+        "label": "SKU",
+        "type": "query",
+        "datasource": { "type": "postgres", "uid": "bitirme-postgres" },
+        "query": "SELECT DISTINCT sku FROM sku_runs ORDER BY sku",
+        "includeAll": true,
+        "multi": true,
+        "refresh": 1
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1,
+      "type": "timeseries",
+      "title": "MAE (winning) — run bazında",
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "format": "time_series",
+          "rawSql": "SELECT fr.completed_at AS time, sr.sku AS metric, sr.winning_mae AS value FROM sku_runs sr JOIN forecast_runs fr USING (run_id) WHERE sr.sku IN (${sku:sqlstring}) AND sr.winning_mae IS NOT NULL AND $__timeFilter(fr.completed_at) ORDER BY fr.completed_at",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      },
+      "options": { "legend": { "showLegend": true, "placement": "right" } }
+    },
+    {
+      "id": 2,
+      "type": "bargauge",
+      "title": "Son Run MAE sıralaması",
+      "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sku, winning_mae FROM sku_runs WHERE run_id = (SELECT run_id FROM last_run) ORDER BY winning_mae DESC NULLS LAST LIMIT 20",
+          "refId": "A"
+        }
+      ],
+      "options": { "orientation": "horizontal", "displayMode": "gradient" }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Ortalama MAE (son 5 run)",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 10 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 5) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id IN (SELECT run_id FROM r)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Aktif SKU sayısı",
+      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 15 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "SELECT COUNT(DISTINCT sku) AS skus FROM sku_runs WHERE status='completed'",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

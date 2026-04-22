@@ -1,0 +1,106 @@
+export const resources = {
+  tr: {
+    common: {
+      app_title: 'Depo Yönetim Paneli',
+      nav: {
+        dashboard: 'Ana Ekran',
+        runs: 'Çalışmalar',
+        cart: 'Sipariş Sepeti',
+        analytics: 'Analiz',
+        drift: 'Drift',
+        settings: 'Ayarlar',
+      },
+      urgency: {
+        CRITICAL: 'Kritik',
+        HIGH: 'Yüksek',
+        MEDIUM: 'Orta',
+        LOW: 'Düşük',
+        UNKNOWN: 'Bilinmiyor',
+      },
+      actions: {
+        trigger_all: 'Tümünü Çalıştır',
+        trigger_sku: 'Bu SKU için Çalıştır',
+        add_to_cart: 'Sepete Ekle',
+        approve: 'Onayla',
+        export_csv: 'CSV İndir',
+        retry: 'Yeniden Dene',
+      },
+      status: {
+        queued: 'Kuyrukta',
+        running: 'Çalışıyor',
+        completed: 'Tamamlandı',
+        failed: 'Başarısız',
+      },
+      labels: {
+        sku: 'SKU',
+        mae: 'MAE',
+        mape: 'MAPE',
+        stockout_p3m: '3ay stockout',
+        stockout_p6m: '6ay stockout',
+        order_qty: 'Önerilen Sipariş',
+        starting_stock: 'Mevcut Stok',
+        cum_demand: 'Q-kantil Talep',
+        moq: 'MOQ',
+        lot_size: 'Lot',
+        model: 'Model',
+        phase: 'Faz',
+      },
+      empty: {
+        no_skus: 'Henüz SKU bulunmuyor. Önce bir çalışma tetikleyin.',
+      },
+    },
+  },
+  en: {
+    common: {
+      app_title: 'Warehouse Operations Dashboard',
+      nav: {
+        dashboard: 'Dashboard',
+        runs: 'Runs',
+        cart: 'Cart',
+        analytics: 'Analytics',
+        drift: 'Drift',
+        settings: 'Settings',
+      },
+      urgency: {
+        CRITICAL: 'Critical',
+        HIGH: 'High',
+        MEDIUM: 'Medium',
+        LOW: 'Low',
+        UNKNOWN: 'Unknown',
+      },
+      actions: {
+        trigger_all: 'Run All',
+        trigger_sku: 'Run for this SKU',
+        add_to_cart: 'Add to Cart',
+        approve: 'Approve',
+        export_csv: 'Export CSV',
+        retry: 'Retry',
+      },
+      status: {
+        queued: 'Queued',
+        running: 'Running',
+        completed: 'Completed',
+        failed: 'Failed',
+      },
+      labels: {
+        sku: 'SKU',
+        mae: 'MAE',
+        mape: 'MAPE',
+        stockout_p3m: '3mo stockout',
+        stockout_p6m: '6mo stockout',
+        order_qty: 'Suggested order',
+        starting_stock: 'Current stock',
+        cum_demand: 'Q-quantile demand',
+        moq: 'MOQ',
+        lot_size: 'Lot',
+        model: 'Model',
+        phase: 'Phase',
+      },
+      empty: {
+        no_skus: 'No SKUs yet. Trigger a run first.',
+      },
+    },
+  },
+} as const;
+
+export type Resources = typeof resources;
