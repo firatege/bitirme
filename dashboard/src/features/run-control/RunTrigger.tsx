@@ -1,19 +1,28 @@
 import { useState } from 'react';
 import { Button } from '@/shared/ui/Button';
-import { useCreateRun, useRunStatus } from '@/shared/api/hooks';
+import { ConfirmModal } from '@/shared/ui/ConfirmModal';
+import { useCreateRun, useRunStatus, useSkuList } from '@/shared/api/hooks';
 import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 import { toast } from '@/shared/ui/Toast';
 
+const CONCURRENCY = 4;
+
 export function RunTrigger() {
   const [runId, setRunId] = useState<number | null>(null);
+  const [showConfirm, setShowConfirm] = useState(false);
   const create = useCreateRun();
   const status = useRunStatus(runId);
   const recordRun = useRunHistoryStore((s) => s.record);
+  const skuList = useSkuList();
 
-  const handleRun = async () => {
+  const skuCount = skuList.data?.length ?? null;
+  const estimatedMin = skuCount ? Math.ceil(skuCount / CONCURRENCY) * 2 : null;
+
+  const handleConfirm = async () => {
+    setShowConfirm(false);
     try {
       const res = await create.mutateAsync({
-        concurrency: 4,
+        concurrency: CONCURRENCY,
         check_drift: true,
       });
       setRunId(res.run_id);
@@ -26,8 +35,40 @@ export function RunTrigger() {
 
   return (
     <div className="flex items-center gap-3">
+      <ConfirmModal
+        open={showConfirm}
+        title="Tüm SKU'ları Çalıştır"
+        confirmLabel="Çalıştır"
+        onConfirm={handleConfirm}
+        onCancel={() => setShowConfirm(false)}
+      >
+        <p>
+          Portföydeki{' '}
+          <span className="font-semibold text-slate-900 dark:text-slate-100">
+            {skuCount !== null ? `${skuCount} SKU` : "tüm SKU'lar"}
+          </span>{' '}
+          için tahmin pipeline'ı başlatılacak.
+        </p>
+        <ul className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+          <li>
+            <span className="font-medium">Eşzamanlılık:</span> {CONCURRENCY} iş paralel
+          </li>
+          {estimatedMin && (
+            <li>
+              <span className="font-medium">Tahmini süre:</span> ~{estimatedMin} dk
+            </li>
+          )}
+          <li>
+            <span className="font-medium">Drift kontrolü:</span> aktif
+          </li>
+          <li className="pt-1 text-amber-600 dark:text-amber-400">
+            Mevcut tahminlerin üzerine yazılacak.
+          </li>
+        </ul>
+      </ConfirmModal>
+
       <Button
-        onClick={handleRun}
+        onClick={() => setShowConfirm(true)}
         disabled={create.isPending}
         variant="primary"
       >

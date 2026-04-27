@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
   useSkuHistory,
@@ -8,6 +9,7 @@ import { Skeleton } from '@/shared/ui/Skeleton';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
+import { ConfirmModal } from '@/shared/ui/ConfirmModal';
 import { toast } from '@/shared/ui/Toast';
 import { UrgencyBadge } from '@/features/sku-list/UrgencyBadge';
 import { urgencyOf } from '@/entities/sku/selectors';
@@ -23,8 +25,10 @@ export function SkuDetailPage() {
   const history = useSkuHistory(sku);
   const trigger = useTriggerSkuForecast();
   const recordRun = useRunHistoryStore((s) => s.record);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  const handleRerun = async () => {
+  const handleConfirm = async () => {
+    setShowConfirm(false);
     try {
       const res = await trigger.mutateAsync(sku);
       recordRun({ run_id: res.run_id, trigger: 'sku', sku });
@@ -74,6 +78,24 @@ export function SkuDetailPage() {
 
   return (
     <div className="space-y-6">
+      <ConfirmModal
+        open={showConfirm}
+        title={`${sku} — Yeniden Çalıştır`}
+        confirmLabel="Çalıştır"
+        onConfirm={handleConfirm}
+        onCancel={() => setShowConfirm(false)}
+      >
+        <p>
+          <span className="font-semibold text-slate-900 dark:text-slate-100">
+            {sku}
+          </span>{' '}
+          için tahmin pipeline'ı yeniden başlatılacak.
+        </p>
+        <p className="mt-1 text-xs text-amber-600 dark:text-amber-400">
+          Bu SKU'nun mevcut tahmininin üzerine yazılacak.
+        </p>
+      </ConfirmModal>
+
       <div className="flex items-center gap-3">
         <Link
           to="/"
@@ -87,7 +109,7 @@ export function SkuDetailPage() {
           variant="secondary"
           size="sm"
           className="ml-auto"
-          onClick={handleRerun}
+          onClick={() => setShowConfirm(true)}
           disabled={trigger.isPending}
         >
           {trigger.isPending ? 'Tetikleniyor…' : 'Bu SKU için yeniden çalıştır'}
@@ -99,7 +121,7 @@ export function SkuDetailPage() {
           <OrderBreakdownCard
             sku={sku}
             recommendation={detail.recommendation}
-            onRequestRerun={handleRerun}
+            onRequestRerun={() => setShowConfirm(true)}
           />
         )}
         <StockoutGauge
