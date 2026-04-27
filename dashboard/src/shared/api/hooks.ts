@@ -1,11 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { dataSource } from './source';
 import { queryKeys } from './queryKeys';
+import { rememberSku } from '@/shared/lib/seenSkus';
 
 export function useSkuLatest(sku: string, enabled = true) {
   return useQuery({
     queryKey: queryKeys.skuLatest(sku),
-    queryFn: () => dataSource.getSkuLatest(sku),
+    queryFn: async () => {
+      const result = await dataSource.getSkuLatest(sku);
+      rememberSku(sku);
+      return result;
+    },
     enabled: enabled && !!sku,
     staleTime: 30_000,
     retry: 1,

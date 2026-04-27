@@ -14,21 +14,25 @@ export function Stat({
 }) {
   const toneClass =
     tone === 'critical'
-      ? 'text-red-700'
+      ? 'text-red-700 dark:text-red-400'
       : tone === 'warning'
-        ? 'text-orange-700'
+        ? 'text-orange-700 dark:text-orange-400'
         : tone === 'success'
-          ? 'text-green-700'
-          : 'text-slate-900';
+          ? 'text-green-700 dark:text-green-400'
+          : 'text-slate-900 dark:text-slate-100';
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4">
-      <div className="text-xs uppercase tracking-wide text-slate-500">
+    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
         {label}
       </div>
       <div className={cn('mt-1 text-2xl font-semibold', toneClass)}>
         {value}
       </div>
-      {hint && <div className="mt-1 text-xs text-slate-500">{hint}</div>}
+      {hint && (
+        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+          {hint}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,15 +1,27 @@
 import { useState } from 'react';
 import { Button } from '@/shared/ui/Button';
 import { useCreateRun, useRunStatus } from '@/shared/api/hooks';
+import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
+import { toast } from '@/shared/ui/Toast';
 
 export function RunTrigger() {
   const [runId, setRunId] = useState<number | null>(null);
   const create = useCreateRun();
   const status = useRunStatus(runId);
+  const recordRun = useRunHistoryStore((s) => s.record);
 
   const handleRun = async () => {
-    const res = await create.mutateAsync({ concurrency: 4, check_drift: true });
-    setRunId(res.run_id);
+    try {
+      const res = await create.mutateAsync({
+        concurrency: 4,
+        check_drift: true,
+      });
+      setRunId(res.run_id);
+      recordRun({ run_id: res.run_id, trigger: 'all' });
+      toast(`Run #${res.run_id} kuyruğa eklendi (${res.jobs} job)`, 'success');
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Run tetiklenemedi', 'error');
+    }
   };
 
   return (

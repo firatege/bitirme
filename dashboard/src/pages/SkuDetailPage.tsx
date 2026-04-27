@@ -1,19 +1,44 @@
 import { useParams, Link } from 'react-router-dom';
-import { useSkuHistory, useSkuLatest } from '@/shared/api/hooks';
+import {
+  useSkuHistory,
+  useSkuLatest,
+  useTriggerSkuForecast,
+} from '@/shared/api/hooks';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
+import { Button } from '@/shared/ui/Button';
+import { toast } from '@/shared/ui/Toast';
 import { UrgencyBadge } from '@/features/sku-list/UrgencyBadge';
 import { urgencyOf } from '@/entities/sku/selectors';
 import { OrderBreakdownCard } from '@/features/sku-detail/OrderBreakdownCard';
 import { ModelProvenancePanel } from '@/features/sku-detail/ModelProvenancePanel';
 import { StockoutGauge } from '@/features/sku-detail/StockoutGauge';
 import { HistoryChart } from '@/features/sku-detail/HistoryChart';
+import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 
 export function SkuDetailPage() {
   const { sku = '' } = useParams<{ sku: string }>();
   const latest = useSkuLatest(sku);
   const history = useSkuHistory(sku);
+  const trigger = useTriggerSkuForecast();
+  const recordRun = useRunHistoryStore((s) => s.record);
+
+  const handleRerun = async () => {
+    try {
+      const res = await trigger.mutateAsync(sku);
+      recordRun({ run_id: res.run_id, trigger: 'sku', sku });
+      toast(
+        `Run #${res.run_id} kuyruğa eklendi (${res.jobs} job)`,
+        'success',
+      );
+    } catch (e) {
+      toast(
+        e instanceof Error ? e.message : 'Run tetiklenemedi',
+        'error',
+      );
+    }
+  };
 
   if (latest.isLoading)
     return (
@@ -58,11 +83,24 @@ export function SkuDetailPage() {
         </Link>
         <h1 className="font-mono text-xl text-slate-900">{sku}</h1>
         <UrgencyBadge level={level} />
+        <Button
+          variant="secondary"
+          size="sm"
+          className="ml-auto"
+          onClick={handleRerun}
+          disabled={trigger.isPending}
+        >
+          {trigger.isPending ? 'Tetikleniyor…' : 'Bu SKU için yeniden çalıştır'}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {detail.recommendation && (
-          <OrderBreakdownCard sku={sku} recommendation={detail.recommendation} />
+          <OrderBreakdownCard
+            sku={sku}
+            recommendation={detail.recommendation}
+            onRequestRerun={handleRerun}
+          />
         )}
         <StockoutGauge
           p3m={detail.winning?.p_stockout_3m}

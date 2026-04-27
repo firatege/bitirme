@@ -17,3 +17,44 @@ body {
     Roboto,
     sans-serif;
 }
+
+@layer base {
+  /* Dark mode: input element backgrounds & borders */
+  .dark input[type='text'],
+  .dark input[type='number'],
+  .dark input[type='range'] {
+    background-color: rgb(15 23 42);
+    color: rgb(241 245 249);
+    border-color: rgb(51 65 85);
+  }
+  .dark input::placeholder {
+    color: rgb(100 116 139);
+  }
+  /* Heading default tone in dark mode */
+  .dark h1,
+  .dark h2,
+  .dark h3 {
+    color: rgb(241 245 249);
+  }
+}
+
+@media print {
+  @page {
+    size: A4;
+    margin: 1.2cm;
+  }
+  body {
+    background: white !important;
+    color: black !important;
+  }
+  aside,
+  nav {
+    display: none !important;
+  }
+  main {
+    padding: 0 !important;
+  }
+  .break-inside-avoid {
+    break-inside: avoid;
+  }
+}

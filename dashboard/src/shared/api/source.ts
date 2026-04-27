@@ -1,5 +1,7 @@
 import { apiClient } from './client';
 import { endpoints } from './endpoints';
+import { readSeenSkus } from '@/shared/lib/seenSkus';
+import { env } from '@/shared/config/env';
 import {
   SkuDetailSchema,
   SkuHistorySchema,
@@ -52,8 +54,21 @@ class ControllerAdapter implements ForecastDataSource {
   }
 
   async listSkus(): Promise<string[]> {
+    if (env.useMsw) {
+      const { FIXTURE_SKUS } = await import(
+        '@/test/fixtures/forecastResult.fixture'
+      );
+      return [...FIXTURE_SKUS];
+    }
+    const fromStatic = await this.fetchStaticSkus();
+    const fromLocal = readSeenSkus();
+    const merged = new Set<string>([...fromStatic, ...fromLocal]);
+    return [...merged].sort();
+  }
+
+  private async fetchStaticSkus(): Promise<string[]> {
     try {
-      const res = await fetch('/sku_list.json');
+      const res = await fetch('/sku_list.json', { cache: 'no-store' });
       if (!res.ok) return [];
       const payload = (await res.json()) as { skus?: string[] };
       return payload.skus ?? [];

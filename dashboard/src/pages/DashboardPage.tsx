@@ -1,4 +1,7 @@
 import { SkuTable } from '@/features/sku-list/SkuTable';
+import { PortfolioSummary } from '@/features/sku-list/PortfolioSummary';
+import { AbcMatrix } from '@/features/sku-list/AbcMatrix';
+import { UrgencyLegend } from '@/features/sku-list/UrgencyLegend';
 import { RunTrigger } from '@/features/run-control/RunTrigger';
 
 export function DashboardPage() {
@@ -13,6 +16,13 @@ export function DashboardPage() {
           </p>
         </div>
         <RunTrigger />
+      </div>
+      <PortfolioSummary />
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <AbcMatrix />
+        </div>
+        <UrgencyLegend />
       </div>
       <SkuTable />
     </div>

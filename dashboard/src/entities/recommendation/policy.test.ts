@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { recomputeOrderQty, roundMoqLot } from './policy';
+import {
+  approxRescaleCumDemand,
+  recomputeOrderQty,
+  roundMoqLot,
+} from './policy';
 
 describe('roundMoqLot', () => {
   it('returns 0 for non-positive raw', () => {
@@ -42,5 +46,47 @@ describe('recomputeOrderQty', () => {
     });
     expect(r.raw).toBe(0);
     expect(r.rounded).toBe(0);
+  });
+});
+
+describe('approxRescaleCumDemand', () => {
+  it('returns same value when neither q nor horizon changes', () => {
+    const v = approxRescaleCumDemand({
+      origCumDemandQ: 600,
+      origQ: 0.5,
+      origHCover: 6,
+      newQ: 0.5,
+      newHCover: 6,
+    });
+    expect(v).toBeCloseTo(600, 1);
+  });
+
+  it('scales linearly with horizon when q stays', () => {
+    const v = approxRescaleCumDemand({
+      origCumDemandQ: 600,
+      origQ: 0.5,
+      origHCover: 6,
+      newQ: 0.5,
+      newHCover: 12,
+    });
+    expect(v).toBeCloseTo(1200, 1);
+  });
+
+  it('grows when target quantile increases', () => {
+    const base = approxRescaleCumDemand({
+      origCumDemandQ: 600,
+      origQ: 0.5,
+      origHCover: 6,
+      newQ: 0.5,
+      newHCover: 6,
+    });
+    const higher = approxRescaleCumDemand({
+      origCumDemandQ: 600,
+      origQ: 0.5,
+      origHCover: 6,
+      newQ: 0.95,
+      newHCover: 6,
+    });
+    expect(higher).toBeGreaterThan(base);
   });
 });
