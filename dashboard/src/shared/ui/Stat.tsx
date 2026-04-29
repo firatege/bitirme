@@ -1,37 +1,36 @@
 import { cn } from '@/shared/lib/cn';
-import type { ReactNode } from 'react';
+
+type Tone = 'default' | 'success' | 'critical';
+
+const toneClasses: Record<Tone, string> = {
+  default: 'text-slate-900 dark:text-slate-100',
+  success: 'text-green-700 dark:text-green-400',
+  critical: 'text-red-700 dark:text-red-400',
+};
 
 export function Stat({
   label,
   value,
-  hint,
   tone = 'default',
+  hint,
 }: {
   label: string;
-  value: ReactNode;
-  hint?: ReactNode;
-  tone?: 'default' | 'critical' | 'warning' | 'success';
+  value: string;
+  tone?: Tone;
+  hint?: string;
 }) {
-  const toneClass =
-    tone === 'critical'
-      ? 'text-red-700 dark:text-red-400'
-      : tone === 'warning'
-        ? 'text-orange-700 dark:text-orange-400'
-        : tone === 'success'
-          ? 'text-green-700 dark:text-green-400'
-          : 'text-slate-900 dark:text-slate-100';
   return (
-    <div className="rounded-lg border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="text-xs uppercase tracking-wide text-slate-500 dark:text-slate-400">
+    <div className="rounded-xl border border-slate-200 bg-white px-5 py-4 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+      <p className="text-xs font-medium text-slate-500 dark:text-slate-400">
         {label}
-      </div>
-      <div className={cn('mt-1 text-2xl font-semibold', toneClass)}>
+      </p>
+      <p className={cn('mt-1 text-2xl font-semibold tabular-nums', toneClasses[tone])}>
         {value}
-      </div>
+      </p>
       {hint && (
-        <div className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+        <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">
           {hint}
-        </div>
+        </p>
       )}
     </div>
   );

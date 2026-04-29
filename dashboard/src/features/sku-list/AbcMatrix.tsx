@@ -16,6 +16,7 @@ import { dataSource } from '@/shared/api/source';
 import { queryKeys } from '@/shared/api/queryKeys';
 import { useSkuList } from '@/shared/api/hooks';
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card';
+import { useThemeStore } from '@/shared/lib/theme';
 
 interface MatrixPoint {
   sku: string;
@@ -26,6 +27,12 @@ interface MatrixPoint {
 export function AbcMatrix() {
   const navigate = useNavigate();
   const { data: skus = [] } = useSkuList();
+  const theme = useThemeStore((s) => s.theme);
+  const isDark =
+    theme === 'dark' ||
+    (theme === 'system' &&
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-color-scheme: dark)').matches);
 
   const queries = useQueries({
     queries: skus.map((sku) => ({
@@ -66,12 +73,12 @@ export function AbcMatrix() {
         <div className="h-72 w-full">
           <ResponsiveContainer>
             <ScatterChart margin={{ top: 10, right: 30, bottom: 30, left: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
               <XAxis
                 type="number"
                 dataKey="p3m"
                 domain={[0, 1]}
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#334155' }}
                 label={{
                   value: '3-ay stockout olasılığı',
                   position: 'bottom',
@@ -83,7 +90,7 @@ export function AbcMatrix() {
               <YAxis
                 type="number"
                 dataKey="qty"
-                tick={{ fontSize: 11 }}
+                tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#334155' }}
                 label={{
                   value: 'Önerilen sipariş',
                   angle: -90,
@@ -115,7 +122,7 @@ export function AbcMatrix() {
                   if (!active || !payload || !payload[0]) return null;
                   const p = payload[0].payload as MatrixPoint;
                   return (
-                    <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md">
+                    <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       <div className="font-mono">{p.sku}</div>
                       <div>Stockout 3m: {(p.p3m * 100).toFixed(1)}%</div>
                       <div>Sipariş: {p.qty.toFixed(0)}</div>
@@ -125,7 +132,7 @@ export function AbcMatrix() {
               />
               <Scatter
                 data={points}
-                fill="#0f172a"
+                fill={isDark ? '#38bdf8' : '#0f172a'}
                 onClick={(p: MatrixPoint) =>
                   navigate(`/skus/${encodeURIComponent(p.sku)}`)
                 }

@@ -1,61 +1,46 @@
 import { http, HttpResponse } from 'msw';
 import {
-  fixtureRunStatus,
+  FIXTURE_SKUS,
   fixtureSkuDetail,
   fixtureSkuHistory,
-  FIXTURE_SKUS,
+  fixtureRunStatus,
 } from '../fixtures/forecastResult.fixture';
-import { env } from '@/shared/config/env';
 
-const API = env.apiBaseUrl;
-
-let nextRunId = 1001;
+let nextRunId = 2000;
 
 export const handlers = [
-  http.get(`${API}/healthz`, () => HttpResponse.json({ ok: true })),
-
-  http.get(`${API}/readyz`, () =>
-    HttpResponse.json({ db_ok: true, worker_ok: true }),
-  ),
-
-  http.get(`${API}/skus/:sku/latest`, ({ params }) => {
-    const sku = decodeURIComponent(String(params.sku));
-    if (!FIXTURE_SKUS.includes(sku as (typeof FIXTURE_SKUS)[number])) {
-      return HttpResponse.json({ error: 'sku not found' }, { status: 404 });
-    }
-    return HttpResponse.json(fixtureSkuDetail(sku));
+  // GET /skus/:sku/latest
+  http.get('*/skus/:sku/latest', ({ params }) => {
+    return HttpResponse.json(fixtureSkuDetail(String(params.sku)));
   }),
 
-  http.get(`${API}/skus/:sku/history`, ({ params }) => {
-    const sku = decodeURIComponent(String(params.sku));
-    return HttpResponse.json(fixtureSkuHistory(sku));
+  // GET /skus/:sku/history
+  http.get('*/skus/:sku/history', ({ params }) => {
+    return HttpResponse.json(fixtureSkuHistory(String(params.sku)));
   }),
 
-  http.post(`${API}/runs`, () => {
+  // GET /runs/:runId
+  http.get('*/runs/:runId', ({ params }) => {
+    return HttpResponse.json(fixtureRunStatus(Number(params.runId)));
+  }),
+
+  // POST /runs
+  http.post('*/runs', () => {
     const runId = nextRunId++;
-    return HttpResponse.json(
-      { run_id: runId, jobs: FIXTURE_SKUS.length, status: 'queued' },
-      { status: 202 },
-    );
+    return HttpResponse.json({
+      run_id: runId,
+      jobs: FIXTURE_SKUS.length,
+      status: 'queued',
+    });
   }),
 
-  http.post(`${API}/skus/:sku/forecast`, () => {
+  // POST /skus/:sku/forecast
+  http.post('*/skus/:sku/forecast', () => {
     const runId = nextRunId++;
-    return HttpResponse.json(
-      { run_id: runId, jobs: 1, status: 'queued' },
-      { status: 202 },
-    );
-  }),
-
-  http.get(`${API}/runs/:runId`, ({ params }) => {
-    const runId = Number(params.runId);
-    return HttpResponse.json(fixtureRunStatus(runId));
-  }),
-
-  http.get(`${API}/runs/:runId/skus/:sku`, ({ params }) => {
-    const sku = decodeURIComponent(String(params.sku));
-    const detail = fixtureSkuDetail(sku);
-    detail.run_id = Number(params.runId);
-    return HttpResponse.json(detail);
+    return HttpResponse.json({
+      run_id: runId,
+      jobs: 1,
+      status: 'queued',
+    });
   }),
 ];

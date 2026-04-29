@@ -1,34 +1,24 @@
-const STORAGE_KEY = 'bitirme-seen-skus-v1';
+const STORAGE_KEY = 'seen_skus';
 
+/** Persist a SKU code so it appears in the list even if the static file is missing. */
+export function rememberSku(sku: string): void {
+  const set = new Set(readSeenSkus());
+  set.add(sku);
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...set]));
+  } catch {
+    // ignore quota errors
+  }
+}
+
+/** Read all previously-seen SKU codes from localStorage. */
 export function readSeenSkus(): string[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter((x): x is string => typeof x === 'string');
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : [];
   } catch {
     return [];
-  }
-}
-
-export function rememberSku(sku: string): void {
-  if (!sku) return;
-  try {
-    const existing = new Set(readSeenSkus());
-    existing.add(sku);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...existing].sort()));
-  } catch {
-    /* ignore */
-  }
-}
-
-export function rememberMany(skus: readonly string[]): void {
-  try {
-    const existing = new Set(readSeenSkus());
-    skus.forEach((s) => s && existing.add(s));
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([...existing].sort()));
-  } catch {
-    /* ignore */
   }
 }

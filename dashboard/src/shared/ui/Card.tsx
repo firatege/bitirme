@@ -1,15 +1,22 @@
+import { type ReactNode } from 'react';
 import { cn } from '@/shared/lib/cn';
-import type { HTMLAttributes, ReactNode } from 'react';
 
-export function Card({ className, ...props }: HTMLAttributes<HTMLDivElement>) {
+export function Card({
+  children,
+  className,
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
   return (
     <div
       className={cn(
         'rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
         className,
       )}
-      {...props}
-    />
+    >
+      {children}
+    </div>
   );
 }
 
@@ -18,14 +25,14 @@ export function CardHeader({
   subtitle,
   action,
 }: {
-  title: ReactNode;
-  subtitle?: ReactNode;
+  title: string;
+  subtitle?: string;
   action?: ReactNode;
 }) {
   return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-5 py-3 dark:border-slate-800">
+    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
       <div>
-        <h3 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
+        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
           {title}
         </h3>
         {subtitle && (
@@ -34,14 +41,17 @@ export function CardHeader({
           </p>
         )}
       </div>
-      {action}
+      {action && <div>{action}</div>}
     </div>
   );
 }
 
 export function CardBody({
+  children,
   className,
-  ...props
-}: HTMLAttributes<HTMLDivElement>) {
-  return <div className={cn('p-5', className)} {...props} />;
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={cn('px-5 py-4', className)}>{children}</div>;
 }

@@ -1,73 +1,52 @@
-import { useEffect, useRef, type ReactNode } from 'react';
-import { createPortal } from 'react-dom';
+import { type ReactNode, useEffect, useRef } from 'react';
 import { Button } from './Button';
-
-interface ConfirmModalProps {
-  open: boolean;
-  title: string;
-  children: ReactNode;
-  confirmLabel?: string;
-  cancelLabel?: string;
-  confirmVariant?: 'primary' | 'danger';
-  onConfirm: () => void;
-  onCancel: () => void;
-}
 
 export function ConfirmModal({
   open,
   title,
-  children,
   confirmLabel = 'Onayla',
-  cancelLabel = 'İptal',
-  confirmVariant = 'primary',
   onConfirm,
   onCancel,
-}: ConfirmModalProps) {
-  const dialogRef = useRef<HTMLDivElement>(null);
+  children,
+}: {
+  open: boolean;
+  title: string;
+  confirmLabel?: string;
+  onConfirm: () => void;
+  onCancel: () => void;
+  children?: ReactNode;
+}) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
 
   useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onCancel();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [open, onCancel]);
+    const el = dialogRef.current;
+    if (!el) return;
+    if (open && !el.open) el.showModal();
+    if (!open && el.open) el.close();
+  }, [open]);
 
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      aria-modal="true"
-      role="dialog"
+  return (
+    <dialog
+      ref={dialogRef}
+      onCancel={onCancel}
+      className="w-full max-w-md rounded-xl border border-slate-200 bg-white p-0 shadow-xl backdrop:bg-black/40 dark:border-slate-700 dark:bg-slate-900"
     >
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-      <div
-        ref={dialogRef}
-        className="relative z-10 w-full max-w-md rounded-xl bg-white shadow-xl dark:bg-slate-900 dark:ring-1 dark:ring-slate-700"
-      >
-        <div className="px-6 pt-6 pb-4">
-          <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
-            {title}
-          </h2>
-          <div className="mt-3 text-sm text-slate-600 dark:text-slate-400 space-y-2">
-            {children}
-          </div>
+      <div className="space-y-4 p-6">
+        <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+          {title}
+        </h2>
+        <div className="text-sm text-slate-600 dark:text-slate-300">
+          {children}
         </div>
-        <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4 dark:border-slate-800">
-          <Button variant="secondary" size="sm" onClick={onCancel}>
-            {cancelLabel}
+        <div className="flex justify-end gap-2 pt-2">
+          <Button variant="secondary" onClick={onCancel}>
+            İptal
           </Button>
-          <Button variant={confirmVariant} size="sm" onClick={onConfirm}>
+          <Button variant="primary" onClick={onConfirm}>
             {confirmLabel}
           </Button>
         </div>
       </div>
-    </div>,
-    document.body,
+    </dialog>
   );
 }
