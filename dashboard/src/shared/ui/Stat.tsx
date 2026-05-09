@@ -1,10 +1,11 @@
 import { cn } from '@/shared/lib/cn';
 
-type Tone = 'default' | 'success' | 'critical';
+type Tone = 'default' | 'success' | 'warning' | 'critical';
 
 const toneClasses: Record<Tone, string> = {
   default: 'text-slate-900 dark:text-slate-100',
   success: 'text-green-700 dark:text-green-400',
+  warning: 'text-amber-600 dark:text-amber-400',
   critical: 'text-red-700 dark:text-red-400',
 };
 
