@@ -24,6 +24,22 @@ interface MatrixPoint {
   qty: number;
 }
 
+type RiskBucket = 'low' | 'mid' | 'high';
+
+function bucketOf(p3m: number): RiskBucket {
+  if (p3m >= 0.5) return 'high';
+  if (p3m >= 0.25) return 'mid';
+  return 'low';
+}
+
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  if (s.length % 2) return s[m] ?? 0;
+  return ((s[m - 1] ?? 0) + (s[m] ?? 0)) / 2;
+}
+
 export function AbcMatrix() {
   const navigate = useNavigate();
   const { data: skus = [] } = useSkuList();
@@ -59,17 +75,44 @@ export function AbcMatrix() {
     [queries, skus],
   );
 
+  const medianQty = useMemo(() => median(points.map((p) => p.qty)), [points]);
+
+  const colors = {
+    low: isDark ? '#34d399' : '#059669',
+    mid: isDark ? '#fbbf24' : '#d97706',
+    high: isDark ? '#fb7185' : '#dc2626',
+  } as const;
+
+  const buckets = useMemo(() => {
+    const out: Record<RiskBucket, MatrixPoint[]> = { low: [], mid: [], high: [] };
+    for (const p of points) out[bucketOf(p.p3m)].push(p);
+    return out;
+  }, [points]);
+
   if (points.length === 0) {
     return null;
   }
+
+  const onPointClick = (p: MatrixPoint) =>
+    navigate(`/skus/${encodeURIComponent(p.sku)}`);
 
   return (
     <Card>
       <CardHeader
         title="Aciliyet × Hacim Matrisi"
-        subtitle="Sağ üst köşedeki SKU'lar öncelikli — yüksek stockout riski + yüksek hacim"
+        subtitle="Her nokta bir SKU. Sağa gidildikçe stockout riski artar, yukarı çıkıldıkça sipariş hacmi büyür. Sağ üst köşedeki SKU'lar öncelikli."
       />
       <CardBody>
+        {/* Renk açıklaması — eşikler */}
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+          <LegendDot color={colors.low} label="Düşük risk (< %25)" />
+          <LegendDot color={colors.mid} label="Orta risk (%25 – %50)" />
+          <LegendDot color={colors.high} label="Kritik (> %50)" />
+          <span className="ml-auto text-slate-400 dark:text-slate-500">
+            {points.length} SKU
+          </span>
+        </div>
+
         <div className="h-72 w-full">
           <ResponsiveContainer>
             <ScatterChart margin={{ top: 10, right: 30, bottom: 30, left: 30 }}>
@@ -100,52 +143,161 @@ export function AbcMatrix() {
                 }}
               />
               <ZAxis range={[60, 220]} />
+
+              {/* Risk eşikleri (dikey) */}
               <ReferenceLine
                 x={0.25}
-                stroke="#fb923c"
+                stroke={colors.mid}
                 strokeDasharray="4 4"
+                label={{
+                  value: '%25',
+                  position: 'top',
+                  fontSize: 10,
+                  fill: colors.mid,
+                }}
               />
               <ReferenceLine
                 x={0.5}
-                stroke="#dc2626"
+                stroke={colors.high}
                 strokeDasharray="4 4"
+                label={{
+                  value: '%50',
+                  position: 'top',
+                  fontSize: 10,
+                  fill: colors.high,
+                }}
               />
+
+              {/* Hacim medyanı (yatay) — yüksek/düşük hacim ayrımı */}
+              {medianQty > 0 && (
+                <ReferenceLine
+                  y={medianQty}
+                  stroke={isDark ? '#64748b' : '#94a3b8'}
+                  strokeDasharray="2 4"
+                  label={{
+                    value: 'medyan hacim',
+                    position: 'right',
+                    fontSize: 10,
+                    fill: isDark ? '#94a3b8' : '#64748b',
+                  }}
+                />
+              )}
+
               <Tooltip
                 cursor={{ strokeDasharray: '3 3' }}
-                formatter={(value: number, name: string) =>
-                  name === 'p3m'
-                    ? `${(value * 100).toFixed(1)}%`
-                    : value.toFixed(0)
-                }
-                labelFormatter={() => ''}
                 content={({ active, payload }) => {
                   if (!active || !payload || !payload[0]) return null;
                   const p = payload[0].payload as MatrixPoint;
+                  const b = bucketOf(p.p3m);
+                  const label =
+                    b === 'high' ? 'Kritik' : b === 'mid' ? 'Orta risk' : 'Düşük risk';
                   return (
                     <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
                       <div className="font-mono">{p.sku}</div>
                       <div>Stockout 3m: {(p.p3m * 100).toFixed(1)}%</div>
                       <div>Sipariş: {p.qty.toFixed(0)}</div>
+                      <div className="mt-1" style={{ color: colors[b] }}>
+                        {label}
+                      </div>
                     </div>
                   );
                 }}
               />
+
+              {/* Risk seviyesine göre 3 ayrı seri — her biri farklı renkte */}
               <Scatter
-                data={points}
-                fill={isDark ? '#38bdf8' : '#0f172a'}
-                onClick={(p: MatrixPoint) =>
-                  navigate(`/skus/${encodeURIComponent(p.sku)}`)
-                }
+                name="low"
+                data={buckets.low}
+                fill={colors.low}
+                onClick={(p: MatrixPoint) => onPointClick(p)}
+                cursor="pointer"
+              />
+              <Scatter
+                name="mid"
+                data={buckets.mid}
+                fill={colors.mid}
+                onClick={(p: MatrixPoint) => onPointClick(p)}
+                cursor="pointer"
+              />
+              <Scatter
+                name="high"
+                data={buckets.high}
+                fill={colors.high}
+                onClick={(p: MatrixPoint) => onPointClick(p)}
                 cursor="pointer"
               />
             </ScatterChart>
           </ResponsiveContainer>
         </div>
-        <p className="mt-2 text-[11px] text-slate-500">
-          Turuncu çizgi: %25 risk eşiği · Kırmızı çizgi: %50 kritik eşik. SKU'ya
-          tıklayarak detaya gidin.
+
+        {/* 4 bölge açıklaması */}
+        <div className="mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
+          <QuadrantNote
+            tone="critical"
+            title="Sağ üst — Öncelikli"
+            text="Yüksek risk + yüksek hacim. Önce bunları sipariş et."
+          />
+          <QuadrantNote
+            tone="warning"
+            title="Sağ alt — Riskli ama küçük"
+            text="Stockout riski var, hacim küçük; sipariş kolay ama gözden kaçırma."
+          />
+          <QuadrantNote
+            tone="info"
+            title="Sol üst — Sağlıklı çekirdek"
+            text="Yüksek hacim, risk düşük. Stok seviyesini koru, agresif sipariş gerekmez."
+          />
+          <QuadrantNote
+            tone="muted"
+            title="Sol alt — Önemsiz"
+            text="Düşük risk + düşük hacim. Rutin döngüde takip edilebilir."
+          />
+        </div>
+
+        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+          Bir SKU'ya tıklayarak detay sayfasına gidebilirsin.
         </p>
       </CardBody>
     </Card>
+  );
+}
+
+function LegendDot({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className="inline-block h-2.5 w-2.5 rounded-full"
+        style={{ backgroundColor: color }}
+        aria-hidden
+      />
+      <span>{label}</span>
+    </span>
+  );
+}
+
+function QuadrantNote({
+  tone,
+  title,
+  text,
+}: {
+  tone: 'critical' | 'warning' | 'info' | 'muted';
+  title: string;
+  text: string;
+}) {
+  const toneClasses: Record<typeof tone, string> = {
+    critical:
+      'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30',
+    warning:
+      'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30',
+    info:
+      'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30',
+    muted:
+      'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40',
+  };
+  return (
+    <div className={`rounded-md border px-2.5 py-1.5 ${toneClasses[tone]}`}>
+      <div className="font-medium text-slate-700 dark:text-slate-200">{title}</div>
+      <div className="mt-0.5 text-slate-600 dark:text-slate-400">{text}</div>
+    </div>
   );
 }
