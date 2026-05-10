@@ -4,7 +4,7 @@
   "tags": ["bitirme", "kpi"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "1m",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -106,7 +106,7 @@
     },
     {
       "id": 6,
-      "type": "scatter",
+      "type": "xychart",
       "title": "Aciliyet × Hacim (son run)",
       "description": "Her nokta = bir SKU. X = 3 ay stockout olasılığı, Y = önerilen sipariş hacmi. Sağ üst köşedeki SKU'lar hem riskli hem büyük → öncelikli sipariş.",
       "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },

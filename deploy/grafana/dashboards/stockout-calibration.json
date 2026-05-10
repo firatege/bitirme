@@ -4,7 +4,7 @@
   "tags": ["bitirme", "calibration"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "1m",
   "time": { "from": "now-180d", "to": "now" },
   "panels": [
@@ -42,7 +42,7 @@
     },
     {
       "id": 3,
-      "type": "scatter",
+      "type": "xychart",
       "title": "p3m vs p6m — SKU bazında",
       "description": "Her nokta = bir SKU. Eğri y = x'in üzerinde olmalı (6 aylık risk her zaman 3 aylıktan büyük veya eşit). Eğrinin altındaki noktalar tutarsız tahmin işaretidir. Sağ üst → her iki ufukta da yüksek risk → en kritik SKU.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
