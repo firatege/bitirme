@@ -4,7 +4,7 @@
   "tags": ["bitirme", "kpi"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 4,
+  "version": 5,
   "refresh": "1m",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -118,17 +118,12 @@
         }
       ],
       "options": {
-        "series": [
-          {
-            "x": { "matcher": { "id": "byName", "options": "p3m" } },
-            "y": { "matcher": { "id": "byName", "options": "order_qty" } },
-            "name": "SKU",
-            "pointSize": { "fixed": 6 }
-          }
-        ]
+        "mapping": "auto",
+        "series": [],
+        "seriesMapping": "auto"
       },
       "fieldConfig": {
-        "defaults": { "unit": "short" },
+        "defaults": { "unit": "short", "custom": { "pointSize": 6, "show": "points" } },
         "overrides": [
           { "matcher": { "id": "byName", "options": "p3m" }, "properties": [{ "id": "unit", "value": "percentunit" }, { "id": "displayName", "value": "P(stockout, 3 ay)" }] },
           { "matcher": { "id": "byName", "options": "order_qty" }, "properties": [{ "id": "displayName", "value": "Önerilen sipariş" }] }
