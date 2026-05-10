@@ -4,7 +4,7 @@
   "tags": ["bitirme", "ops"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-30d", "to": "now" },
   "panels": [
@@ -12,6 +12,7 @@
       "id": 1,
       "type": "timeseries",
       "title": "Run süresi (dakika)",
+      "description": "Her tamamlanmış run'ın baştan sona süresi. Süre = completed_at − started_at, dakika cinsinden. Pipeline'ın yavaşladığını veya FAST_MODE değişikliklerinin etkisini izlemek için kullanılır. Tek run varsa tek nokta gözükür.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
@@ -20,12 +21,13 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "m" } }
+      "fieldConfig": { "defaults": { "unit": "m", "decimals": 1 } }
     },
     {
       "id": 2,
       "type": "stat",
       "title": "Başarılı run oranı (30g)",
+      "description": "Son 30 günde tetiklenen tüm run'lar arasında 'completed' durumuyla bitenlerin oranı. %100 = ideal; %95 altı incelenmeli.",
       "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
@@ -34,12 +36,26 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "percentunit" } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": 0 },
+              { "color": "orange", "value": 0.85 },
+              { "color": "green", "value": 0.95 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 3,
       "type": "stat",
       "title": "Başarısız job (son run)",
+      "description": "Son run'da 'failed' durumunda kalan SKU sayısı. 0'dan büyükse hatalı job'lar tablosundan log'ları inceleyin.",
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
@@ -47,12 +63,25 @@
           "rawSql": "SELECT COUNT(*) AS n FROM forecast_jobs WHERE run_id=(SELECT run_id FROM forecast_runs ORDER BY started_at DESC LIMIT 1) AND status='failed'",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": 0 },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 4,
       "type": "bargauge",
       "title": "Job durumu (son run)",
+      "description": "Son run'daki job'ların durum dağılımı: queued (sırada), running (çalışıyor), completed (tamam), failed (hata).",
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 5 },
       "targets": [
         {
@@ -60,17 +89,20 @@
           "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs ORDER BY started_at DESC LIMIT 1) SELECT status, COUNT(*) AS n FROM forecast_jobs WHERE run_id=(SELECT run_id FROM r) GROUP BY status",
           "refId": "A"
         }
-      ]
+      ],
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": { "defaults": { "unit": "short" } }
     },
     {
       "id": 5,
       "type": "table",
-      "title": "Hatalı joblar",
+      "title": "Hatalı joblar — son 50",
+      "description": "status='failed' olan job kayıtları. attempts kolonu retry sayısını gösterir; last_error worker'dan dönen hata mesajıdır. Boş tablo iyi haber.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT job_id, run_id, sku, attempts, last_error FROM forecast_jobs WHERE status='failed' ORDER BY job_id DESC LIMIT 50",
+          "rawSql": "SELECT job_id AS \"Job\", run_id AS \"Run\", sku AS \"SKU\", attempts AS \"Deneme\", last_error AS \"Hata\" FROM forecast_jobs WHERE status='failed' ORDER BY job_id DESC LIMIT 50",
           "refId": "A"
         }
       ]
@@ -79,6 +111,7 @@
       "id": 6,
       "type": "timeseries",
       "title": "Run başına SKU sayısı (cold vs warm)",
+      "description": "cold = SKU ilk kez tahmin ediliyor (model train + tüm grid search); warm = drift detekte edilmedi, önceki spec yeniden kullanıldı (cache hit). Sağlıklı operasyonda warm oranı zamanla artar.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
       "targets": [
         {
@@ -86,7 +119,8 @@
           "rawSql": "SELECT fr.started_at AS time, sr.mode::text AS metric, COUNT(*) AS value FROM sku_runs sr JOIN forecast_runs fr USING(run_id) WHERE $__timeFilter(fr.started_at) GROUP BY fr.started_at, sr.mode ORDER BY fr.started_at",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
     }
   ]
 }

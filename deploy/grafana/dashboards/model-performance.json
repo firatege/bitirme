@@ -4,7 +4,7 @@
   "tags": ["bitirme", "model"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "30s",
   "time": { "from": "now-90d", "to": "now" },
   "templating": {
@@ -25,7 +25,8 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "MAE (winning) — run bazında",
+      "title": "MAE (winning model) — run bazında",
+      "description": "Her SKU için her run'da kazanan modelin MAE değerinin zaman serisi. Sağ üstteki SKU dropdown'undan filtreleyebilirsiniz. Tek run yapıldıysa SKU başına tek nokta görünür — anlamlı trend için 3-5 run gerekir.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
@@ -43,42 +44,49 @@
     {
       "id": 2,
       "type": "bargauge",
-      "title": "Son Run MAE sıralaması",
+      "title": "Son run — SKU başına MAE (büyükten küçüğe)",
+      "description": "Son run'daki SKU'ların kazanan model MAE değerleri. SKU'ların talep ölçeği farklı olduğu için (ör. 303-107672 vs 305-109463) doğrudan karşılaştırma yapılırken bu farklılık göz önünde bulundurulmalı.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sku, winning_mae FROM sku_runs WHERE run_id = (SELECT run_id FROM last_run) ORDER BY winning_mae DESC NULLS LAST LIMIT 20",
+          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sku, winning_mae FROM sku_runs WHERE run_id = (SELECT run_id FROM last_run) AND winning_mae IS NOT NULL ORDER BY winning_mae DESC NULLS LAST LIMIT 25",
           "refId": "A"
         }
       ],
-      "options": { "orientation": "horizontal", "displayMode": "gradient" }
+      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Ortalama MAE (son 5 run)",
+      "title": "Ortalama MAE (son run)",
+      "description": "Son run'daki tüm SKU'ların kazanan model MAE'sinin aritmetik ortalaması. NOT: SKU ölçekleri farklı olduğu için bu sayı 'genel doğruluk' anlamına gelmez — düşüş/yükseliş trendi takip etmek için run'lar arası kıyas anlamlıdır.",
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 5) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id IN (SELECT run_id FROM r)",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id IN (SELECT run_id FROM r)",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
     },
     {
       "id": 4,
-      "type": "stat",
-      "title": "Aktif SKU sayısı",
-      "gridPos": { "h": 5, "w": 12, "x": 12, "y": 15 },
+      "type": "barchart",
+      "title": "Kazanan model dağılımı (son run)",
+      "description": "Son run'da OMS politikası tarafından seçilen exog yöntemi × Y varyantı kombinasyonlarının frekansı. 'Hangi model en sık kazandı' sorusuna cevap verir; portföydeki SKU'lara hangi metodun uygun olduğunu gösterir.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 15 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "SELECT COUNT(DISTINCT sku) AS skus FROM sku_runs WHERE status='completed'",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT (winning_exog || ' · ' || winning_y_variant) AS model, COUNT(*) AS n FROM sku_runs WHERE run_id = (SELECT run_id FROM r) AND winning_exog IS NOT NULL GROUP BY 1 ORDER BY n DESC",
           "refId": "A"
         }
-      ]
+      ],
+      "options": { "orientation": "horizontal", "showValue": "always", "xField": "model" },
+      "fieldConfig": { "defaults": { "unit": "short" } }
     }
   ]
 }

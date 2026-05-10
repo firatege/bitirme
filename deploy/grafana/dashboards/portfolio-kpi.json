@@ -4,14 +4,15 @@
   "tags": ["bitirme", "kpi"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 1,
+  "version": 2,
   "refresh": "1m",
   "time": { "from": "now-180d", "to": "now" },
   "panels": [
     {
       "id": 1,
       "type": "stat",
-      "title": "Kritik SKU (p3m ≥ 0.5)",
+      "title": "Kritik SKU",
+      "description": "Son tamamlanmış run'da p_stockout_3m ≥ %50 olan SKU sayısı. Bu SKU'lar 3 ay içinde stoksuz kalabilir — öncelikli sipariş gerekir.",
       "gridPos": { "h": 5, "w": 6, "x": 0, "y": 0 },
       "targets": [
         {
@@ -22,6 +23,7 @@
       ],
       "fieldConfig": {
         "defaults": {
+          "unit": "short",
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -36,7 +38,8 @@
     {
       "id": 2,
       "type": "stat",
-      "title": "Sipariş Gereken SKU",
+      "title": "Sipariş Bekleyen SKU",
+      "description": "Son run'da OMS politikası tarafından sipariş edilmesi önerilen SKU sayısı (order_qty_rounded > 0). Detay aşağıdaki tablodadır.",
       "gridPos": { "h": 5, "w": 6, "x": 6, "y": 0 },
       "targets": [
         {
@@ -44,12 +47,14 @@
           "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT COUNT(*) AS n FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r) AND order_qty_rounded > 0",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Toplam Önerilen Sipariş (adet)",
+      "title": "Toplam Önerilen Sipariş",
+      "description": "Son run'da tüm SKU'ların önerilen sipariş miktarlarının toplamı (adet). MOQ ve lot boyutuna göre yuvarlanmıştır. SKU başına kırılım için aşağıdaki tabloya bakın.",
       "gridPos": { "h": 5, "w": 6, "x": 12, "y": 0 },
       "targets": [
         {
@@ -57,12 +62,14 @@
           "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT SUM(order_qty_rounded) AS total FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r)",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
     },
     {
       "id": 4,
       "type": "stat",
       "title": "Ortalama MAE",
+      "description": "Son run'daki tüm SKU'ların 'kazanan model' MAE'sinin aritmetik ortalaması. SKU'ların talep ölçeği farklı olduğu için tek başına yorumlanmamalı; SKU başına MAE için Model Performans dashboard'una bakın.",
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
@@ -70,33 +77,100 @@
           "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id=(SELECT run_id FROM r)",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
     },
     {
       "id": 5,
+      "type": "barchart",
+      "title": "Aciliyet seviyesi × SKU sayısı (son run)",
+      "description": "Son run'da SKU'ların aciliyet seviyesi dağılımı. Aciliyet kuralı: KRİTİK = p3m ≥ %50; YÜKSEK = p3m ≥ %25 veya p6m ≥ %50; ORTA = p6m ≥ %25 veya beklenen stockout ≤ 6 ay; DÜŞÜK = bunların hiçbiri.",
+      "gridPos": { "h": 9, "w": 12, "x": 0, "y": 5 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1), levels AS (SELECT CASE WHEN p_stockout_3m >= 0.5 THEN 'KRITIK' WHEN p_stockout_3m >= 0.25 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.5 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.25 THEN 'ORTA' WHEN e_t_stockout_mo <= 6 THEN 'ORTA' ELSE 'DUSUK' END AS level FROM sku_runs WHERE run_id = (SELECT run_id FROM r)) SELECT level, COUNT(*) AS n FROM levels GROUP BY level ORDER BY CASE level WHEN 'KRITIK' THEN 1 WHEN 'YUKSEK' THEN 2 WHEN 'ORTA' THEN 3 WHEN 'DUSUK' THEN 4 END",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "stacking": "none",
+        "xField": "level"
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "type": "scatter",
+      "title": "Aciliyet × Hacim (son run)",
+      "description": "Her nokta = bir SKU. X = 3 ay stockout olasılığı, Y = önerilen sipariş hacmi. Sağ üst köşedeki SKU'lar hem riskli hem büyük → öncelikli sipariş.",
+      "gridPos": { "h": 9, "w": 12, "x": 12, "y": 5 },
+      "targets": [
+        {
+          "format": "table",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sr.p_stockout_3m AS p3m, rec.order_qty_rounded AS order_qty, rec.sku AS sku FROM sku_runs sr JOIN sku_run_recommendation rec USING (run_id, sku) WHERE sr.run_id = (SELECT run_id FROM r) AND sr.p_stockout_3m IS NOT NULL ORDER BY rec.order_qty_rounded DESC",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "series": [
+          {
+            "x": { "matcher": { "id": "byName", "options": "p3m" } },
+            "y": { "matcher": { "id": "byName", "options": "order_qty" } },
+            "name": "SKU",
+            "pointSize": { "fixed": 6 }
+          }
+        ]
+      },
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "p3m" }, "properties": [{ "id": "unit", "value": "percentunit" }, { "id": "displayName", "value": "P(stockout, 3 ay)" }] },
+          { "matcher": { "id": "byName", "options": "order_qty" }, "properties": [{ "id": "displayName", "value": "Önerilen sipariş" }] }
+        ]
+      }
+    },
+    {
+      "id": 7,
       "type": "timeseries",
       "title": "Toplam önerilen sipariş — zaman içinde",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 5 },
+      "description": "Run'lar arasında toplam sipariş önerisinin değişimi. Anlamlı trend için en az 2-3 başarılı run gerekir; tek run varsa tek nokta gözükür.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
       "targets": [
         {
           "format": "time_series",
           "rawSql": "SELECT fr.completed_at AS time, SUM(rec.order_qty_rounded) AS value FROM sku_run_recommendation rec JOIN forecast_runs fr USING (run_id) WHERE fr.status='completed' AND $__timeFilter(fr.completed_at) GROUP BY fr.completed_at ORDER BY fr.completed_at",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": { "defaults": { "unit": "short" } }
     },
     {
-      "id": 6,
+      "id": 8,
       "type": "table",
-      "title": "En yüksek sipariş önerisi olan SKU'lar (son run)",
-      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 15 },
+      "title": "Sipariş önerileri — SKU detay (son run)",
+      "description": "Son run'daki tüm SKU'ların stok / talep / önerilen sipariş / MAE / 3 ay stockout olasılığı. Önerilen sipariş büyükten küçüğe sıralı.",
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 23 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT rec.sku, rec.starting_stock, rec.cum_demand_q, rec.order_qty_rounded, sr.winning_mae, sr.p_stockout_3m FROM sku_run_recommendation rec JOIN sku_runs sr USING (run_id, sku) WHERE rec.run_id=(SELECT run_id FROM r) ORDER BY rec.order_qty_rounded DESC LIMIT 20",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT rec.sku AS \"SKU\", rec.starting_stock AS \"Stok\", rec.cum_demand_q AS \"Beklenen Talep\", rec.order_qty_rounded AS \"Önerilen\", sr.winning_mae AS \"MAE\", sr.p_stockout_3m AS \"P(stockout, 3 ay)\" FROM sku_run_recommendation rec JOIN sku_runs sr USING (run_id, sku) WHERE rec.run_id=(SELECT run_id FROM r) ORDER BY rec.order_qty_rounded DESC",
           "refId": "A"
         }
-      ]
+      ],
+      "fieldConfig": {
+        "defaults": { "unit": "short" },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "P(stockout, 3 ay)" }, "properties": [{ "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 1 }] },
+          { "matcher": { "id": "byName", "options": "MAE" }, "properties": [{ "id": "decimals", "value": 2 }] },
+          { "matcher": { "id": "byName", "options": "Beklenen Talep" }, "properties": [{ "id": "decimals", "value": 1 }] }
+        ]
+      }
     }
   ]
 }

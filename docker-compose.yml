@@ -88,8 +88,10 @@ services:
       POSTGRES_DB: bitirme
     volumes:
       - grafana_data:/var/lib/grafana
-      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      # `:ro,z` paylaşımlı SELinux etiketi koyar — Fedora gibi SELinux-enforcing
+      # ortamlarda bind-mount içeriğinin container tarafından okunması gerekli.
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro,z
+      - ./deploy/grafana/dashboards:/var/lib/grafana/dashboards:ro,z
     ports:
       - "3000:3000"
     depends_on:
