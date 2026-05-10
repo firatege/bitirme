@@ -6,17 +6,7 @@ import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
 
 from services.worker.config import get_config
-
-EXOG_FEATS = ["lag1", "lag3", "month", "year"]
-
-
-def _make_frame(df: pd.DataFrame, col: str) -> pd.DataFrame:
-    d = df[["ds", col]].sort_values("ds").copy()
-    d["lag1"] = d[col].shift(1)
-    d["lag3"] = d[col].shift(3)
-    d["month"] = d["ds"].dt.month
-    d["year"] = d["ds"].dt.year
-    return d
+from services.worker.features.lags import make_exog_frame
 
 
 class MLExogRF:
@@ -27,28 +17,31 @@ class MLExogRF:
     @classmethod
     def train(cls, df: pd.DataFrame, col: str, cutoff: pd.Timestamp) -> "MLExogRF | None":
         cfg = get_config()
-        d = _make_frame(df[df["ds"] < cutoff], col).dropna()
+        d = make_exog_frame(df[df["ds"] < cutoff], col).dropna()
         if d.empty:
             return None
+        feats = list(cfg.features_exog)
         n_est = 300 if cfg.fast_mode else 400
         rf = RandomForestRegressor(
             n_estimators=n_est, max_depth=8,
             min_samples_split=2, min_samples_leaf=1,
             random_state=cfg.random_state, n_jobs=-1,
         )
-        rf.fit(d[EXOG_FEATS], d[col])
+        rf.fit(d[feats], d[col])
         return cls(rf, col)
 
     def recursive_forecast(
         self, hist_df: pd.DataFrame, start_ds: pd.Timestamp, end_ds: pd.Timestamp
     ) -> pd.DataFrame:
+        cfg = get_config()
+        feats = list(cfg.features_exog)
         col = self._col
         fut = pd.date_range(start_ds, end_ds, freq="MS")
         full = hist_df[["ds", col]].sort_values("ds").copy()
         out = []
         for ds in fut:
-            tmp = _make_frame(full, col)
-            row = tmp[tmp["ds"] == ds][EXOG_FEATS]
+            tmp = make_exog_frame(full, col)
+            row = tmp[tmp["ds"] == ds][feats]
             if row.empty:
                 last = full[col].iloc[-1] if len(full) else 0.0
                 lag3 = full[col].iloc[-3] if len(full) >= 3 else last

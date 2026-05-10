@@ -26,8 +26,7 @@ class YXGBoost:
         if not HAVE_XGB:
             return None
         cfg = get_config()
-        tree_method = "gpu_hist" if cfg.use_gpu_xgb else "hist"
-        p = {
+        kwargs: dict = {
             "n_estimators": params.get("n_estimators", 400),
             "learning_rate": params.get("learning_rate", 0.08),
             "max_depth": params.get("max_depth", 3),
@@ -35,10 +34,12 @@ class YXGBoost:
             "colsample_bytree": params.get("colsample_bytree", 0.9),
             "reg_lambda": params.get("reg_lambda", 1.2),
             "random_state": cfg.random_state,
-            "tree_method": tree_method,
             "verbosity": 0,
         }
-        m = XGBRegressor(**p)
+        if cfg.use_gpu_xgb:
+            kwargs["tree_method"] = "hist"
+            kwargs["device"] = "cuda"
+        m = XGBRegressor(**kwargs)
         m.fit(X.to_numpy() if hasattr(X, "to_numpy") else X, y, verbose=False)
         return cls(m, params)
 

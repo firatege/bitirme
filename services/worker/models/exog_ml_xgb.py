@@ -5,23 +5,13 @@ import numpy as np
 import pandas as pd
 
 from services.worker.config import get_config
-
-EXOG_FEATS = ["lag1", "lag3", "month", "year"]
+from services.worker.features.lags import make_exog_frame
 
 try:
     from xgboost import XGBRegressor
     _HAVE_XGB = True
 except ImportError:
     _HAVE_XGB = False
-
-
-def _make_frame(df: pd.DataFrame, col: str) -> pd.DataFrame:
-    d = df[["ds", col]].sort_values("ds").copy()
-    d["lag1"] = d[col].shift(1)
-    d["lag3"] = d[col].shift(3)
-    d["month"] = d["ds"].dt.month
-    d["year"] = d["ds"].dt.year
-    return d
 
 
 class MLExogXGB:
@@ -34,28 +24,40 @@ class MLExogXGB:
         if not _HAVE_XGB:
             return None
         cfg = get_config()
-        d = _make_frame(df[df["ds"] < cutoff], col).dropna()
+        d = make_exog_frame(df[df["ds"] < cutoff], col).dropna()
         if d.empty:
             return None
+        feats = list(cfg.features_exog)
         n_est = 400 if cfg.fast_mode else 500
-        m = XGBRegressor(
-            n_estimators=n_est, learning_rate=0.08, max_depth=3,
-            subsample=0.9, colsample_bytree=0.9, reg_lambda=1.2,
-            random_state=cfg.random_state, verbosity=0,
-        )
-        m.fit(d[EXOG_FEATS].to_numpy(), d[col].to_numpy(), verbose=False)
+        kwargs: dict = {
+            "n_estimators": n_est,
+            "learning_rate": 0.08,
+            "max_depth": 3,
+            "subsample": 0.9,
+            "colsample_bytree": 0.9,
+            "reg_lambda": 1.2,
+            "random_state": cfg.random_state,
+            "verbosity": 0,
+        }
+        if cfg.use_gpu_xgb:
+            kwargs["tree_method"] = "hist"
+            kwargs["device"] = "cuda"
+        m = XGBRegressor(**kwargs)
+        m.fit(d[feats].to_numpy(), d[col].to_numpy(), verbose=False)
         return cls(m, col)
 
     def recursive_forecast(
         self, hist_df: pd.DataFrame, start_ds: pd.Timestamp, end_ds: pd.Timestamp
     ) -> pd.DataFrame:
+        cfg = get_config()
+        feats = list(cfg.features_exog)
         col = self._col
         fut = pd.date_range(start_ds, end_ds, freq="MS")
         full = hist_df[["ds", col]].sort_values("ds").copy()
         out = []
         for ds in fut:
-            tmp = _make_frame(full, col)
-            row = tmp[tmp["ds"] == ds][EXOG_FEATS]
+            tmp = make_exog_frame(full, col)
+            row = tmp[tmp["ds"] == ds][feats]
             if row.empty:
                 last = full[col].iloc[-1] if len(full) else 0.0
                 lag3 = full[col].iloc[-3] if len(full) >= 3 else last
