@@ -1,6 +1,7 @@
 apiVersion: 1
 datasources:
   - name: Bitirme Postgres
+    uid: bitirme-postgres
     type: postgres
     access: proxy
     url: postgres:5432
@@ -14,3 +15,6 @@ datasources:
       timescaledb: false
     isDefault: true
     editable: false
+deleteDatasources:
+  - name: Bitirme Postgres
+    orgId: 1

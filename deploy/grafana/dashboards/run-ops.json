@@ -4,9 +4,9 @@
   "tags": ["bitirme", "ops"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
-  "time": { "from": "now-30d", "to": "now" },
+  "time": { "from": "now-6h", "to": "now" },
   "panels": [
     {
       "id": 1,
