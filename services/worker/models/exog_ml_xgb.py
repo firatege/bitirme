@@ -1,6 +1,9 @@
 """MLExogXGB — XGBoost for recursive orders/stock forecasting."""
 from __future__ import annotations
 
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
 
@@ -9,9 +12,9 @@ from services.worker.features.lags import make_exog_frame
 
 try:
     from xgboost import XGBRegressor
-    _HAVE_XGB = True
+    HAVE_XGB = True
 except ImportError:
-    _HAVE_XGB = False
+    HAVE_XGB = False
 
 
 class MLExogXGB:
@@ -21,7 +24,7 @@ class MLExogXGB:
 
     @classmethod
     def train(cls, df: pd.DataFrame, col: str, cutoff: pd.Timestamp) -> "MLExogXGB | None":
-        if not _HAVE_XGB:
+        if not HAVE_XGB:
             return None
         cfg = get_config()
         d = make_exog_frame(df[df["ds"] < cutoff], col).dropna()
@@ -71,3 +74,12 @@ class MLExogXGB:
                 [full, pd.DataFrame({"ds": [ds], col: [yhat]})], ignore_index=True
             )
         return pd.DataFrame(out)
+
+    def save(self, path: Path) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"col": self._col, "model": self._model}, path)
+
+    @classmethod
+    def load(cls, path: Path) -> "MLExogXGB":
+        blob = joblib.load(path)
+        return cls(blob["model"], blob["col"])

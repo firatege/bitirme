@@ -1,6 +1,9 @@
 """MLExogRF — RandomForest for recursive orders/stock forecasting."""
 from __future__ import annotations
 
+from pathlib import Path
+
+import joblib
 import numpy as np
 import pandas as pd
 from sklearn.ensemble import RandomForestRegressor
@@ -55,3 +58,12 @@ class MLExogRF:
                 [full, pd.DataFrame({"ds": [ds], col: [yhat]})], ignore_index=True
             )
         return pd.DataFrame(out)
+
+    def save(self, path: Path) -> None:
+        Path(path).parent.mkdir(parents=True, exist_ok=True)
+        joblib.dump({"col": self._col, "model": self._model}, path)
+
+    @classmethod
+    def load(cls, path: Path) -> "MLExogRF":
+        blob = joblib.load(path)
+        return cls(blob["model"], blob["col"])

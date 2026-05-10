@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 
-def _croston(y: np.ndarray, alpha: float) -> float:
+def croston_forecast(y, alpha: float = 0.1) -> float:
+    y = np.asarray(y, dtype=float)
     z = p = 0.0
     q = 1
     init = False
@@ -24,11 +25,12 @@ def _croston(y: np.ndarray, alpha: float) -> float:
     return z / p
 
 
-def _sba(y: np.ndarray, alpha: float) -> float:
-    return _croston(y, alpha) * (1 - alpha / 2.0)
+def sba_forecast(y, alpha: float = 0.1) -> float:
+    return croston_forecast(y, alpha) * (1 - alpha / 2.0)
 
 
-def _tsb(y: np.ndarray, alpha: float) -> float:
+def tsb_forecast(y, alpha: float = 0.1) -> float:
+    y = np.asarray(y, dtype=float)
     z = p = 0.0
     init = False
     for x in y:
@@ -54,11 +56,11 @@ def predict_intermittent(
     fut = pd.date_range(start_ds, end_ds, freq="MS")
     y = pd.to_numeric(hist_df["y"], errors="coerce").fillna(0.0).to_numpy()
     if method == "Croston":
-        f = _croston(y, alpha)
+        f = croston_forecast(y, alpha)
     elif method == "SBA":
-        f = _sba(y, alpha)
+        f = sba_forecast(y, alpha)
     else:
-        f = _tsb(y, alpha)
+        f = tsb_forecast(y, alpha)
     f = max(0.0, float(f))
     return pd.DataFrame({"ds": fut, "yhat": [f] * len(fut)})
 
