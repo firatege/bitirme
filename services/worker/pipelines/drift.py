@@ -22,6 +22,17 @@ def run_drift_check(request: DriftCheckRequest) -> DriftCheckResult:
     cfg = get_config()
     cached = request.cached_spec
 
+    # Intermittent (TSB/Croston/SBA) bağımsız bir Y-forecaster'dır; warm path'in
+    # `build_exog_by_method` üzerinden RF/XGB exog tablosu yeniden inşa etmesi
+    # mümkün değil. Drift'i tetikleyip controller'ı cold path'e yönlendiriyoruz.
+    if cached.winning_exog == "Intermittent":
+        return DriftCheckResult(
+            drift_triggered=True,
+            new_mae=0.0,
+            cached_mae=0.0,
+            threshold=cfg.drift_eps,
+        )
+
     df = pd.DataFrame(
         [
             {"ds": pd.Timestamp(r.ds), "y": r.y, "orders": r.orders, "stock": r.stock}

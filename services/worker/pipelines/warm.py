@@ -49,6 +49,16 @@ def run_warm(request: ForecastWarmRequest) -> ForecastResult:
     cfg = get_config()
     cached = request.cached_spec
 
+    # Intermittent (TSB/Croston/SBA) bağımsız bir Y-forecaster'dır; warm path'in
+    # RF/XGB exog tablosu inşa etmesi mümkün değil. Bu durum yalnızca drift_check
+    # devre dışı bırakıldığında bu noktaya kadar gelir; net hata fırlatıyoruz ki
+    # controller cold path tetiklesin / job fail olarak görünsün.
+    if cached.winning_exog == "Intermittent":
+        raise ValueError(
+            "warm path Intermittent (TSB/Croston/SBA) için desteklenmiyor — "
+            "cold path veya drift_check=true ile çalıştırın"
+        )
+
     d = _panel_to_df(request)
     mask_train = d["ds"] < cfg.val_start
     mask_val = (d["ds"] >= cfg.val_start) & (d["ds"] <= cfg.val_end)
