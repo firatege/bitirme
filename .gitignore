@@ -5,6 +5,7 @@
 !veri_matrisi_final_sales_orders_stock_calendar_lags_fx.csv
 !Cluster0_AltKume2.csv
 !Cluster0_AltKume2_dikey.csv
+!tests/parity.csv
 
 # Jupyter Notebook ara dosyaları
 .ipynb_checkpoints/
