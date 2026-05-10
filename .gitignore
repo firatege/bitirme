@@ -46,7 +46,9 @@ venv/
 controller/target/
 
 # Lokal blob store (prod'da Docker volume kullanılıyor)
-models/
+# NOT: yalnızca repo kökündeki /models/ — services/worker/models/ Python
+# paketi bu kuraldan etkilenmez.
+/models/
 
 # Yerel .env (.env.example commit ediliyor)
 .env
