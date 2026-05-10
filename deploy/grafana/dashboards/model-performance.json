@@ -4,7 +4,7 @@
   "tags": ["bitirme", "model"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 2,
+  "version": 3,
   "refresh": "30s",
   "time": { "from": "now-90d", "to": "now" },
   "templating": {
@@ -17,7 +17,12 @@
         "query": "SELECT DISTINCT sku FROM sku_runs ORDER BY sku",
         "includeAll": true,
         "multi": true,
-        "refresh": 1
+        "refresh": 1,
+        "current": {
+          "selected": true,
+          "text": ["All"],
+          "value": ["$__all"]
+        }
       }
     ]
   },
@@ -43,9 +48,9 @@
     },
     {
       "id": 2,
-      "type": "bargauge",
+      "type": "barchart",
       "title": "Son run — SKU başına MAE (büyükten küçüğe)",
-      "description": "Son run'daki SKU'ların kazanan model MAE değerleri. SKU'ların talep ölçeği farklı olduğu için (ör. 303-107672 vs 305-109463) doğrudan karşılaştırma yapılırken bu farklılık göz önünde bulundurulmalı.",
+      "description": "Son run'daki SKU'ların kazanan model MAE değerleri. SKU'ların talep ölçeği farklı olduğu için doğrudan karşılaştırma yapılırken bu farklılık göz önünde bulundurulmalı.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "targets": [
         {
@@ -54,7 +59,13 @@
           "refId": "A"
         }
       ],
-      "options": { "orientation": "horizontal", "displayMode": "gradient" },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "stacking": "none",
+        "xField": "sku",
+        "legend": { "showLegend": false }
+      },
       "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
     },
     {
@@ -81,11 +92,16 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT (winning_exog || ' · ' || winning_y_variant) AS model, COUNT(*) AS n FROM sku_runs WHERE run_id = (SELECT run_id FROM r) AND winning_exog IS NOT NULL GROUP BY 1 ORDER BY n DESC",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT (winning_exog || ' · ' || winning_y_variant::text) AS model, COUNT(*) AS n FROM sku_runs WHERE run_id = (SELECT run_id FROM r) AND winning_exog IS NOT NULL GROUP BY 1 ORDER BY n DESC",
           "refId": "A"
         }
       ],
-      "options": { "orientation": "horizontal", "showValue": "always", "xField": "model" },
+      "options": {
+        "orientation": "horizontal",
+        "showValue": "always",
+        "xField": "model",
+        "legend": { "showLegend": false }
+      },
       "fieldConfig": { "defaults": { "unit": "short" } }
     }
   ]
