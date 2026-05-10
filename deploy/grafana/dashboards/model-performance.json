@@ -4,7 +4,7 @@
   "tags": ["bitirme", "model"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": { "from": "now-90d", "to": "now" },
   "templating": {
@@ -18,6 +18,7 @@
         "includeAll": true,
         "multi": true,
         "refresh": 1,
+        "allValue": ".*",
         "current": {
           "selected": true,
           "text": ["All"],
@@ -36,7 +37,7 @@
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "SELECT fr.completed_at AS time, sr.sku AS metric, sr.winning_mae AS value FROM sku_runs sr JOIN forecast_runs fr USING (run_id) WHERE sr.sku IN (${sku:sqlstring}) AND sr.winning_mae IS NOT NULL AND $__timeFilter(fr.completed_at) ORDER BY fr.completed_at",
+          "rawSql": "SELECT fr.completed_at AS time, sr.sku AS metric, sr.winning_mae AS value FROM sku_runs sr JOIN forecast_runs fr USING (run_id) WHERE sr.sku ~ '${sku:regex}' AND sr.winning_mae IS NOT NULL AND $__timeFilter(fr.completed_at) ORDER BY fr.completed_at",
           "refId": "A"
         }
       ],
