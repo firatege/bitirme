@@ -9,26 +9,29 @@ interface ThemeState {
 }
 
 /**
- * Apply the resolved theme (light | dark) to the <html> element so that
- * Tailwind's `dark:` variant and the CSS `.dark` selectors work correctly.
+ * Apply the resolved theme (light | dark) to the <html> element.
+ * Both `.dark` and `.light` classes are toggled so CSS can target either.
  */
 function applyTheme(theme: Theme): void {
   const root = document.documentElement;
+  let isDark: boolean;
   if (theme === 'system') {
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    root.classList.toggle('dark', prefersDark);
+    isDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
   } else {
-    root.classList.toggle('dark', theme === 'dark');
+    isDark = theme === 'dark';
   }
+  root.classList.toggle('dark', isDark);
+  root.classList.toggle('light', !isDark);
 }
 
 /**
  * Zustand store persisted to localStorage under the key `theme`.
+ * Varsayılan: dark — operasyonel kontrol paneli için.
  */
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      theme: 'system',
+      theme: 'dark',
       setTheme: (t: Theme) => {
         applyTheme(t);
         set({ theme: t });

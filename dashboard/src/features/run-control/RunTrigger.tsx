@@ -44,12 +44,12 @@ export function RunTrigger() {
       >
         <p>
           Portföydeki{' '}
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
+          <span className="font-semibold text-slate-900 dark:text-stone-100">
             {skuCount !== null ? `${skuCount} SKU` : "tüm SKU'lar"}
           </span>{' '}
           için tahmin pipeline'ı başlatılacak.
         </p>
-        <ul className="mt-2 space-y-1 text-xs text-slate-500 dark:text-slate-400">
+        <ul className="mt-2 space-y-1 text-xs text-slate-500 dark:text-stone-400">
           <li>
             <span className="font-medium">Eşzamanlılık:</span> {CONCURRENCY} iş paralel
           </li>
@@ -93,10 +93,14 @@ export function RunTrigger() {
 
 function StatusBadge({ status }: { status: string }) {
   const map: Record<string, string> = {
-    queued: 'bg-slate-100 text-slate-700 ring-slate-200',
-    running: 'bg-blue-100 text-blue-700 ring-blue-200',
-    completed: 'bg-green-100 text-green-700 ring-green-200',
-    failed: 'bg-red-100 text-red-700 ring-red-200',
+    queued:
+      'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-surface-2 dark:text-stone-300 dark:ring-surface-line',
+    running:
+      'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30',
+    completed:
+      'bg-brand-100 text-brand-800 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-500/30',
+    failed:
+      'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30',
   };
   return (
     <span

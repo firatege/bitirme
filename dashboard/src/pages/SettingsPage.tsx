@@ -12,7 +12,9 @@ export function SettingsPage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Ayarlar</h1>
+      <h1 className="text-xl font-medium text-slate-900 dark:text-stone-50">
+        Ayarlar
+      </h1>
 
       <Card>
         <CardHeader title="Tema" />
@@ -48,8 +50,8 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader title="Backend Konfigürasyonu" />
-        <CardBody className="space-y-2 text-sm">
+        <CardHeader title="Backend Konfigürasyonu" subtitle=".env'den okunur" />
+        <CardBody className="space-y-1.5 text-sm">
           <Row label="API Base URL" value={env.apiBaseUrl} />
           <Row label="Grafana URL" value={env.grafanaUrl} />
           <Row
@@ -65,9 +67,11 @@ export function SettingsPage() {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between border-b border-slate-100 py-1 last:border-0 dark:border-slate-800">
-      <span className="text-slate-500 dark:text-slate-400">{label}</span>
-      <span className="font-mono text-xs">{value}</span>
+    <div className="flex items-center justify-between border-b border-slate-100 py-1.5 last:border-0 dark:border-surface-line/60">
+      <span className="text-slate-500 dark:text-stone-400">{label}</span>
+      <span className="font-mono text-xs text-slate-700 dark:text-stone-200">
+        {value}
+      </span>
     </div>
   );
 }

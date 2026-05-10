@@ -55,14 +55,14 @@ export function PortfolioSummary() {
         tone={stats.critical > 0 ? 'critical' : 'success'}
       />
       <Stat
-        label="Sipariş Gereken"
+        label="Sipariş Bekleyen"
         value={fmtInt(stats.needsReorder)}
         tone={stats.needsReorder > 0 ? 'warning' : 'default'}
       />
       <Stat
         label="Toplam Sipariş"
         value={fmtInt(stats.totalOrderQty)}
-        hint="adet (yuvarlanmış)"
+        hint="adet · MOQ yuvarlanmış"
       />
       <Stat
         label="Ortalama MAE"

@@ -87,9 +87,8 @@ export function CartView() {
         <Button variant="secondary" onClick={clear}>
           Sepeti Boşalt
         </Button>
-        <span className="ml-auto text-xs text-slate-500">
-          {rows.length} SKU · Toplam {fmtInt(totalQty)} adet · Tahmini{' '}
-          {fmtInt(totalCost)} TL
+        <span className="ml-auto text-xs text-slate-500 dark:text-stone-400">
+          {rows.length} SKU · {fmtInt(totalQty)} adet · ~{fmtInt(totalCost)} TL
         </span>
       </div>
 
@@ -116,7 +115,7 @@ export function CartView() {
                 type="number"
                 value={budget}
                 onChange={(e) => setBudget(Number(e.target.value))}
-                className="rounded-md border border-slate-200 px-3 py-1.5 tabular-nums"
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 tabular-nums dark:border-surface-line dark:bg-surface-2"
               />
             </label>
             <label className="flex flex-col gap-1">
@@ -126,7 +125,7 @@ export function CartView() {
                 step="0.1"
                 value={unitCost}
                 onChange={(e) => setUnitCost(Number(e.target.value))}
-                className="rounded-md border border-slate-200 px-3 py-1.5 tabular-nums"
+                className="rounded-md border border-slate-200 bg-white px-3 py-1.5 tabular-nums dark:border-surface-line dark:bg-surface-2"
               />
             </label>
             <div className="col-span-2 text-xs text-slate-600">
@@ -167,12 +166,12 @@ export function CartView() {
             />
             <CardBody className="p-0">
               <table className="w-full text-sm">
-                <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+                <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-surface-line dark:bg-surface-2/30 dark:text-stone-400">
                   <tr>
-                    <th className="px-4 py-2 text-left">SKU</th>
-                    <th className="px-4 py-2 text-right">Önerilen</th>
-                    <th className="px-4 py-2 text-right">Onaylanan</th>
-                    <th className="px-4 py-2 text-left">Not</th>
+                    <th className="px-4 py-2 text-left font-medium">SKU</th>
+                    <th className="px-4 py-2 text-right font-medium">Önerilen</th>
+                    <th className="px-4 py-2 text-right font-medium">Onaylanan</th>
+                    <th className="px-4 py-2 text-left font-medium">Not</th>
                     <th className="px-4 py-2 print:hidden"></th>
                   </tr>
                 </thead>
@@ -181,13 +180,15 @@ export function CartView() {
                     <tr
                       key={r.sku}
                       className={cn(
-                        'border-b border-slate-100 last:border-0',
+                        'border-b border-slate-100 transition-colors last:border-0 hover:bg-brand-50/40 dark:border-surface-line/50 dark:hover:bg-surface-2/40',
                         overBudgetSet.has(r.sku) &&
-                          'bg-slate-50 text-slate-400',
+                          'bg-slate-50 text-slate-400 dark:bg-surface-2/30 dark:text-stone-200/30',
                       )}
                     >
-                      <td className="px-4 py-2 font-mono text-xs">{r.sku}</td>
-                      <td className="px-4 py-2 text-right tabular-nums">
+                      <td className="px-4 py-2 font-mono text-xs text-slate-800 dark:text-stone-100">
+                        {r.sku}
+                      </td>
+                      <td className="px-4 py-2 text-right font-mono tabular-nums text-slate-700 dark:text-stone-300">
                         {fmtInt(r.suggested_qty)}
                       </td>
                       <td className="px-4 py-2 text-right">
@@ -199,7 +200,7 @@ export function CartView() {
                               approved_qty: Number(e.target.value),
                             })
                           }
-                          className="w-24 rounded-md border border-slate-200 px-2 py-1 text-right tabular-nums print:border-0"
+                          className="w-24 rounded-md border border-slate-200 bg-white px-2 py-1 text-right font-mono tabular-nums dark:border-surface-line dark:bg-surface-2 print:border-0"
                         />
                       </td>
                       <td className="px-4 py-2">
@@ -210,7 +211,7 @@ export function CartView() {
                             update(r.sku, { note: e.target.value })
                           }
                           placeholder="Not…"
-                          className="w-full rounded-md border border-slate-200 px-2 py-1 text-sm print:border-0"
+                          className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm dark:border-surface-line dark:bg-surface-2 print:border-0"
                         />
                       </td>
                       <td className="px-4 py-2 text-right print:hidden">

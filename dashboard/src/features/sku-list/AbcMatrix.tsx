@@ -78,8 +78,8 @@ export function AbcMatrix() {
   const medianQty = useMemo(() => median(points.map((p) => p.qty)), [points]);
 
   const colors = {
-    low: isDark ? '#34d399' : '#059669',
-    mid: isDark ? '#fbbf24' : '#d97706',
+    low: isDark ? '#2dd4bf' : '#0d9488',
+    mid: isDark ? '#fbbf24' : '#ca8a04',
     high: isDark ? '#fb7185' : '#dc2626',
   } as const;
 
@@ -104,11 +104,11 @@ export function AbcMatrix() {
       />
       <CardBody>
         {/* Renk açıklaması — eşikler */}
-        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-slate-300">
+        <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-stone-300">
           <LegendDot color={colors.low} label="Düşük risk (< %25)" />
           <LegendDot color={colors.mid} label="Orta risk (%25 – %50)" />
           <LegendDot color={colors.high} label="Kritik (> %50)" />
-          <span className="ml-auto text-slate-400 dark:text-slate-500">
+          <span className="ml-auto text-slate-400 dark:text-stone-500">
             {points.length} SKU
           </span>
         </div>
@@ -116,12 +116,12 @@ export function AbcMatrix() {
         <div className="h-72 w-full">
           <ResponsiveContainer>
             <ScatterChart margin={{ top: 10, right: 30, bottom: 30, left: 30 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#334155' : '#e2e8f0'} />
+              <CartesianGrid strokeDasharray="3 3" stroke={isDark ? '#2a3140' : '#e2e8f0'} />
               <XAxis
                 type="number"
                 dataKey="p3m"
                 domain={[0, 1]}
-                tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#334155' }}
+                tick={{ fontSize: 11, fill: isDark ? '#a8a29e' : '#334155' }}
                 label={{
                   value: '3-ay stockout olasılığı',
                   position: 'bottom',
@@ -133,7 +133,7 @@ export function AbcMatrix() {
               <YAxis
                 type="number"
                 dataKey="qty"
-                tick={{ fontSize: 11, fill: isDark ? '#94a3b8' : '#334155' }}
+                tick={{ fontSize: 11, fill: isDark ? '#a8a29e' : '#334155' }}
                 label={{
                   value: 'Önerilen sipariş',
                   angle: -90,
@@ -172,13 +172,13 @@ export function AbcMatrix() {
               {medianQty > 0 && (
                 <ReferenceLine
                   y={medianQty}
-                  stroke={isDark ? '#64748b' : '#94a3b8'}
+                  stroke={isDark ? '#3a4254' : '#94a3b8'}
                   strokeDasharray="2 4"
                   label={{
                     value: 'medyan hacim',
                     position: 'right',
                     fontSize: 10,
-                    fill: isDark ? '#94a3b8' : '#64748b',
+                    fill: isDark ? '#a8a29e' : '#64748b',
                   }}
                 />
               )}
@@ -192,7 +192,7 @@ export function AbcMatrix() {
                   const label =
                     b === 'high' ? 'Kritik' : b === 'mid' ? 'Orta risk' : 'Düşük risk';
                   return (
-                    <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200">
+                    <div className="rounded-md border border-slate-200 bg-white p-2 text-xs shadow-md dark:border-surface-line dark:bg-surface-1 dark:text-stone-200">
                       <div className="font-mono">{p.sku}</div>
                       <div>Stockout 3m: {(p.p3m * 100).toFixed(1)}%</div>
                       <div>Sipariş: {p.qty.toFixed(0)}</div>
@@ -254,7 +254,7 @@ export function AbcMatrix() {
           />
         </div>
 
-        <p className="mt-3 text-[11px] text-slate-500 dark:text-slate-400">
+        <p className="mt-3 text-[11px] text-slate-500 dark:text-stone-400">
           Bir SKU'ya tıklayarak detay sayfasına gidebilirsin.
         </p>
       </CardBody>
@@ -286,18 +286,18 @@ function QuadrantNote({
 }) {
   const toneClasses: Record<typeof tone, string> = {
     critical:
-      'border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-950/30',
+      'border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/30',
     warning:
       'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30',
     info:
-      'border-emerald-200 bg-emerald-50 dark:border-emerald-900/40 dark:bg-emerald-950/30',
+      'border-teal-200 bg-teal-50 dark:border-teal-900/40 dark:bg-teal-950/30',
     muted:
-      'border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/40',
+      'border-slate-200 bg-slate-50 dark:border-surface-line dark:bg-surface-2/40',
   };
   return (
     <div className={`rounded-md border px-2.5 py-1.5 ${toneClasses[tone]}`}>
-      <div className="font-medium text-slate-700 dark:text-slate-200">{title}</div>
-      <div className="mt-0.5 text-slate-600 dark:text-slate-400">{text}</div>
+      <div className="font-medium text-slate-700 dark:text-stone-200">{title}</div>
+      <div className="mt-0.5 text-slate-600 dark:text-stone-400">{text}</div>
     </div>
   );
 }

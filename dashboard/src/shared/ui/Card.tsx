@@ -4,14 +4,18 @@ import { cn } from '@/shared/lib/cn';
 export function Card({
   children,
   className,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  accent: _accent = false,
 }: {
   children: ReactNode;
   className?: string;
+  accent?: boolean;
 }) {
   return (
     <div
       className={cn(
-        'rounded-xl border border-slate-200 bg-white shadow-sm dark:border-slate-800 dark:bg-slate-900',
+        'rounded-lg border bg-white dark:bg-surface-1',
+        'border-slate-200 dark:border-surface-line',
         className,
       )}
     >
@@ -28,20 +32,22 @@ export function CardHeader({
   title: string;
   subtitle?: string;
   action?: ReactNode;
+  /** legacy — eyebrow artık kullanılmıyor, geriye dönük kabul edilir. */
+  eyebrow?: string;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3 dark:border-slate-800">
-      <div>
-        <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+    <div className="flex items-start justify-between gap-3 border-b border-slate-200 px-5 py-3 dark:border-surface-line">
+      <div className="min-w-0">
+        <h3 className="truncate text-sm font-medium text-slate-900 dark:text-stone-50">
           {title}
         </h3>
         {subtitle && (
-          <p className="text-xs text-slate-500 dark:text-slate-400">
+          <p className="mt-0.5 line-clamp-2 text-xs text-slate-500 dark:text-stone-200/50">
             {subtitle}
           </p>
         )}
       </div>
-      {action && <div>{action}</div>}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }

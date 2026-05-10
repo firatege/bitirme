@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQueries } from '@tanstack/react-query';
@@ -16,6 +16,7 @@ import { UrgencyBadge } from './UrgencyBadge';
 import { Card } from '@/shared/ui/Card';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { EmptyState } from '@/shared/ui/EmptyState';
+import { cn } from '@/shared/lib/cn';
 
 const LEVELS: UrgencyLevel[] = [
   'CRITICAL',
@@ -25,7 +26,7 @@ const LEVELS: UrgencyLevel[] = [
   'UNKNOWN',
 ];
 
-const ROW_HEIGHT = 48;
+const ROW_HEIGHT = 44;
 
 export function SkuTable() {
   const navigate = useNavigate();
@@ -73,6 +74,12 @@ export function SkuTable() {
     overscan: 8,
   });
 
+  // Filtre/arama değişince tablo en üstten başlasın — kullanıcı önceki scroll
+  // konumunda boş alan görmesin.
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+  }, [filter, search]);
+
   if (skusLoading) {
     return (
       <div className="space-y-2">
@@ -96,37 +103,44 @@ export function SkuTable() {
 
   return (
     <div className="space-y-3">
+      {/* Filtre çubuğu */}
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="SKU ara…"
-          className="h-9 w-64 rounded-lg border border-slate-200 dark:border-slate-700 bg-white px-3 text-sm outline-none focus:border-slate-400"
+          className="h-9 w-64 rounded-md border border-slate-200 bg-white px-3 text-sm outline-none focus:border-brand-500 dark:border-surface-line dark:bg-surface-1"
           data-search-input
         />
         <div className="flex flex-wrap gap-1">
-          {(['ALL', ...LEVELS] as const).map((lvl) => (
-            <button
-              key={lvl}
-              onClick={() => setFilter(lvl)}
-              className={`h-9 rounded-lg px-3 text-xs font-medium transition-colors ${
-                filter === lvl
-                  ? 'bg-slate-900 text-white'
-                  : 'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50'
-              }`}
-            >
-              {lvl === 'ALL' ? 'Tümü' : t(`urgency.${lvl}` as const)}
-            </button>
-          ))}
+          {(['ALL', ...LEVELS] as const).map((lvl) => {
+            const active = filter === lvl;
+            return (
+              <button
+                key={lvl}
+                type="button"
+                onClick={() => setFilter(lvl)}
+                className={cn(
+                  'inline-flex h-9 items-center rounded-md px-3 text-xs transition-colors',
+                  active
+                    ? 'bg-brand-700 text-white dark:bg-brand-600'
+                    : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-surface-line dark:bg-surface-1 dark:text-stone-300 dark:hover:bg-surface-2',
+                )}
+              >
+                {lvl === 'ALL' ? 'Tümü' : t(`urgency.${lvl}` as const)}
+              </button>
+            );
+          })}
         </div>
-        <span className="ml-auto text-xs text-slate-500">
+        <span className="ml-auto text-xs text-slate-500 dark:text-stone-400">
           {rows.length} / {skus.length} SKU
         </span>
       </div>
 
       <Card>
+        {/* Header */}
         <div
-          className="grid border-b border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 px-4 py-2 text-xs uppercase tracking-wide text-slate-500"
+          className="grid items-center gap-x-4 border-b border-slate-200 bg-slate-50 px-4 py-2 text-xs text-slate-500 dark:border-surface-line dark:bg-surface-2/30 dark:text-stone-200/50"
           style={{ gridTemplateColumns: GRID_COLS }}
         >
           <span>Aciliyet</span>
@@ -138,6 +152,8 @@ export function SkuTable() {
           <span className="text-right">{t('labels.mae')}</span>
           <span>{t('labels.model')}</span>
         </div>
+
+        {/* Body */}
         <div
           ref={scrollRef}
           style={{ height: tableHeight }}
@@ -158,33 +174,42 @@ export function SkuTable() {
                   onClick={() =>
                     navigate(`/skus/${encodeURIComponent(r.sku)}`)
                   }
-                  className="absolute inset-x-0 grid cursor-pointer items-center border-b border-slate-100 dark:border-slate-800 px-4 text-sm transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/50 dark:bg-slate-800/50"
+                  className="absolute inset-x-0 grid cursor-pointer items-center gap-x-4 border-b border-slate-100 px-4 text-sm transition-colors hover:bg-slate-50 dark:border-surface-line/50 dark:hover:bg-surface-2/40"
                   style={{
                     gridTemplateColumns: GRID_COLS,
                     height: ROW_HEIGHT,
                     transform: `translateY(${vRow.start}px)`,
                   }}
                 >
-                  <span>
+                  <span className="min-w-0">
                     <UrgencyBadge level={r.level} />
                   </span>
-                  <span className="font-mono text-xs">{r.sku}</span>
-                  <span className="text-right tabular-nums">
+                  <span className="truncate font-mono text-xs text-slate-800 dark:text-stone-100">
+                    {r.sku}
+                  </span>
+                  <span className="text-right tabular-nums text-slate-700 dark:text-stone-200">
                     {fmtInt(r.detail?.recommendation?.starting_stock)}
                   </span>
-                  <span className="text-right font-semibold tabular-nums">
+                  <span className="text-right font-medium tabular-nums text-slate-900 dark:text-stone-50">
                     {fmtInt(r.detail?.recommendation?.order_qty_rounded)}
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="text-right tabular-nums text-slate-700 dark:text-stone-200">
                     {fmtPct(r.detail?.winning?.p_stockout_3m)}
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="text-right tabular-nums text-slate-700 dark:text-stone-200">
                     {fmtPct(r.detail?.winning?.p_stockout_6m)}
                   </span>
-                  <span className="text-right tabular-nums">
+                  <span className="text-right tabular-nums text-slate-700 dark:text-stone-200">
                     {fmtDec(r.detail?.winning?.mae)}
                   </span>
-                  <span className="truncate text-xs text-slate-600">
+                  <span
+                    title={
+                      r.detail?.winning
+                        ? `${r.detail.winning.exog} · ${r.detail.winning.y_variant}`
+                        : ''
+                    }
+                    className="min-w-0 truncate text-xs text-slate-500 dark:text-stone-400"
+                  >
                     {r.detail?.winning
                       ? `${r.detail.winning.exog} · ${r.detail.winning.y_variant}`
                       : '—'}
@@ -199,4 +224,8 @@ export function SkuTable() {
   );
 }
 
-const GRID_COLS = '110px 130px 80px 100px 110px 110px 80px 1fr';
+// Aciliyet · SKU · Stok · Önerilen · 3ay · 6ay · MAE · Model
+// Sayısal kolonlar 4-5 haneli + binlik ayraç sığdırır (örn. 127.600, 9.496,28).
+// Model kolonu uzun string'lerde minmax(180, 1fr) ile esnek genişler.
+const GRID_COLS =
+  '100px 140px 80px 100px 80px 80px 90px minmax(180px, 1fr)';

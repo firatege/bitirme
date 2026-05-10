@@ -6,10 +6,10 @@ export function EmptyState({
   description?: string;
 }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-2 py-16 text-center">
-      <div className="rounded-full bg-slate-100 p-3 dark:bg-slate-800">
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-slate-300 bg-white py-16 text-center dark:border-surface-line dark:bg-surface-1/40">
+      <div className="rounded-full bg-brand-50 p-3 ring-1 ring-inset ring-brand-200 dark:bg-brand-500/10 dark:ring-brand-500/30">
         <svg
-          className="h-6 w-6 text-slate-400"
+          className="h-6 w-6 text-brand-600 dark:text-brand-400"
           fill="none"
           viewBox="0 0 24 24"
           strokeWidth={1.5}
@@ -22,11 +22,11 @@ export function EmptyState({
           />
         </svg>
       </div>
-      <h2 className="text-lg font-semibold text-slate-900 dark:text-slate-100">
+      <h2 className="text-lg font-semibold text-slate-900 dark:text-stone-50">
         {title}
       </h2>
       {description && (
-        <p className="max-w-md text-sm text-slate-500 dark:text-slate-400">
+        <p className="max-w-md text-sm text-slate-500 dark:text-stone-400">
           {description}
         </p>
       )}

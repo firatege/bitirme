@@ -68,7 +68,7 @@ export function OrderBreakdownCard({
         subtitle="Hesap adımları şeffaf · MOQ ve lot ile yuvarlanır"
         action={
           isApprox ? (
-            <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-800 ring-1 ring-amber-200">
+            <span className="rounded bg-amber-100 px-2 py-0.5 text-[10px] font-medium uppercase text-amber-800 ring-1 ring-amber-200 dark:bg-amber-500/15 dark:text-amber-200 dark:ring-amber-500/30">
               Yaklaşık
             </span>
           ) : null
@@ -81,7 +81,7 @@ export function OrderBreakdownCard({
               type="number"
               value={stock}
               onChange={(e) => setStock(Number(e.target.value))}
-              className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right tabular-nums"
+              className="w-28 rounded-md border border-slate-200 bg-white px-2 py-1 text-right tabular-nums dark:border-surface-line dark:bg-surface-2"
             />
           </Row>
           <Row label={`Q-kantil talep${isApprox ? ' (yaklaşık)' : ''}`}>
@@ -95,7 +95,7 @@ export function OrderBreakdownCard({
               type="number"
               value={moq}
               onChange={(e) => setMoq(Number(e.target.value))}
-              className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right tabular-nums"
+              className="w-28 rounded-md border border-slate-200 bg-white px-2 py-1 text-right tabular-nums dark:border-surface-line dark:bg-surface-2"
             />
           </Row>
           <Row label="Lot boyutu">
@@ -103,12 +103,12 @@ export function OrderBreakdownCard({
               type="number"
               value={lot}
               onChange={(e) => setLot(Number(e.target.value))}
-              className="w-28 rounded-md border border-slate-200 px-2 py-1 text-right tabular-nums"
+              className="w-28 rounded-md border border-slate-200 bg-white px-2 py-1 text-right tabular-nums dark:border-surface-line dark:bg-surface-2"
             />
           </Row>
         </dl>
 
-        <div className="space-y-3 rounded-lg bg-slate-50 p-3">
+        <div className="space-y-3 rounded-lg border border-slate-200 bg-slate-50 p-3 dark:border-surface-line dark:bg-surface-2/40">
           <div>
             <div className="flex items-center justify-between text-xs">
               <span className="text-slate-600">
@@ -176,16 +176,15 @@ export function OrderBreakdownCard({
           )}
         </div>
 
-        <div className="rounded-lg bg-slate-900 p-4 text-white">
-          <div className="text-xs uppercase tracking-wide text-slate-400">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 p-4 dark:border-surface-line dark:bg-surface-2/40">
+          <div className="text-xs text-slate-500 dark:text-stone-400">
             Önerilen sipariş (yuvarlanmış)
           </div>
-          <div className="mt-1 text-3xl font-semibold tabular-nums">
+          <div className="mt-1 text-3xl font-medium tabular-nums text-slate-900 dark:text-stone-50">
             {fmtInt(rounded)}
           </div>
-          <div className="mt-1 text-xs text-slate-400">
-            Politika: T_CHECK={recommendation.t_check}ay · q={fmtPct(q)} ·
-            H={hCover}ay
+          <div className="mt-1 text-xs text-slate-500 dark:text-stone-400">
+            T_CHECK={recommendation.t_check}ay · q={fmtPct(q)} · H={hCover}ay
           </div>
         </div>
 
@@ -217,7 +216,7 @@ function Row({
 }) {
   return (
     <>
-      <dt className="text-xs text-slate-500">{label}</dt>
+      <dt className="text-xs text-slate-500 dark:text-stone-400">{label}</dt>
       <dd className="flex justify-end">{children}</dd>
     </>
   );

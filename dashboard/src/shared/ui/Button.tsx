@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from '@/shared/lib/cn';
 
-type Variant = 'primary' | 'secondary' | 'ghost';
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger';
 type Size = 'sm' | 'md';
 
 interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -11,25 +11,30 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variantClasses: Record<Variant, string> = {
   primary:
-    'bg-slate-900 text-white hover:bg-slate-800 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200',
+    'bg-brand-500 text-surface-0 hover:bg-brand-400 active:bg-brand-600 dark:bg-brand-400 dark:text-surface-0 dark:hover:bg-brand-300',
   secondary:
-    'bg-white text-slate-700 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 dark:ring-slate-700 dark:hover:bg-slate-700',
+    'bg-white text-slate-800 ring-1 ring-inset ring-slate-200 hover:bg-slate-50 dark:bg-surface-1 dark:text-stone-100 dark:ring-surface-line dark:hover:bg-surface-2',
   ghost:
-    'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+    'text-slate-600 hover:bg-slate-100 hover:text-slate-900 dark:text-stone-400 dark:hover:bg-surface-2 dark:hover:text-stone-100',
+  danger:
+    'bg-rose-700 text-white hover:bg-rose-600 dark:bg-rose-600 dark:hover:bg-rose-500',
 };
 
 const sizeClasses: Record<Size, string> = {
   sm: 'px-2.5 py-1 text-xs',
-  md: 'px-3.5 py-2 text-sm',
+  md: 'px-3.5 py-1.5 text-sm',
 };
 
 export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ variant = 'primary', size = 'md', className, disabled, ...rest }, ref) => (
+  ({ variant = 'primary', size = 'md', className, disabled, type = 'button', ...rest }, ref) => (
     <button
       ref={ref}
       disabled={disabled}
+      type={type}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex items-center justify-center gap-1.5 rounded-md font-medium transition-colors',
+        'focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-brand-400',
+        'disabled:pointer-events-none disabled:opacity-50',
         variantClasses[variant],
         sizeClasses[size],
         className,

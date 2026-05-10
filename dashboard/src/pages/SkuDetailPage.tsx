@@ -86,7 +86,7 @@ export function SkuDetailPage() {
         onCancel={() => setShowConfirm(false)}
       >
         <p>
-          <span className="font-semibold text-slate-900 dark:text-slate-100">
+          <span className="font-semibold text-slate-900 dark:text-stone-100">
             {sku}
           </span>{' '}
           için tahmin pipeline'ı yeniden başlatılacak.
@@ -96,14 +96,16 @@ export function SkuDetailPage() {
         </p>
       </ConfirmModal>
 
-      <div className="flex items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3">
         <Link
           to="/"
-          className="text-xs text-slate-500 hover:text-slate-800"
+          className="text-xs text-slate-500 hover:text-slate-800 dark:text-stone-400 dark:hover:text-stone-100"
         >
           ← Geri
         </Link>
-        <h1 className="font-mono text-xl text-slate-900">{sku}</h1>
+        <h1 className="font-mono text-lg text-slate-900 dark:text-stone-50">
+          {sku}
+        </h1>
         <UrgencyBadge level={level} />
         <Button
           variant="secondary"

@@ -33,14 +33,32 @@ export function needsReorder(detail: SkuDetail | null | undefined): boolean {
 export function urgencyColorClass(level: UrgencyLevel): string {
   switch (level) {
     case 'CRITICAL':
-      return 'bg-red-100 text-red-800 ring-red-300';
+      return 'bg-rose-100 text-rose-800 ring-rose-300 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/40';
     case 'HIGH':
-      return 'bg-orange-100 text-orange-800 ring-orange-300';
+      return 'bg-orange-100 text-orange-800 ring-orange-300 dark:bg-orange-500/15 dark:text-orange-300 dark:ring-orange-500/40';
     case 'MEDIUM':
-      return 'bg-yellow-100 text-yellow-800 ring-yellow-300';
+      return 'bg-amber-100 text-amber-800 ring-amber-300 dark:bg-amber-500/15 dark:text-amber-300 dark:ring-amber-500/40';
     case 'LOW':
-      return 'bg-green-100 text-green-800 ring-green-300';
+      return 'bg-teal-100 text-teal-800 ring-teal-300 dark:bg-teal-500/15 dark:text-teal-300 dark:ring-teal-500/40';
     default:
-      return 'bg-slate-100 text-slate-700 ring-slate-300';
+      return 'bg-stone-100 text-stone-700 ring-stone-300 dark:bg-surface-2 dark:text-stone-300 dark:ring-surface-line';
+  }
+}
+
+/**
+ * Saf renk (background veya dot için) — urgency seviyesine göre.
+ */
+export function urgencyDotColor(level: UrgencyLevel): string {
+  switch (level) {
+    case 'CRITICAL':
+      return '#dc2626';
+    case 'HIGH':
+      return '#ea580c';
+    case 'MEDIUM':
+      return '#ca8a04';
+    case 'LOW':
+      return '#0d9488';
+    default:
+      return '#64748b';
   }
 }

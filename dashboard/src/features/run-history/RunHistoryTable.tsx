@@ -9,10 +9,14 @@ import { EmptyState } from '@/shared/ui/EmptyState';
 import { Button } from '@/shared/ui/Button';
 
 const STATUS_TONE: Record<string, string> = {
-  queued: 'bg-slate-100 text-slate-700 ring-slate-200',
-  running: 'bg-blue-100 text-blue-700 ring-blue-200',
-  completed: 'bg-emerald-100 text-emerald-700 ring-emerald-200',
-  failed: 'bg-red-100 text-red-700 ring-red-200',
+  queued:
+    'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-surface-2 dark:text-stone-300 dark:ring-surface-line',
+  running:
+    'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30',
+  completed:
+    'bg-brand-100 text-brand-800 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-500/30',
+  failed:
+    'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30',
 };
 
 export function RunHistoryTable() {
@@ -54,8 +58,8 @@ export function RunHistoryTable() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-500">
-          Toplam {entries.length} kayıtlı çalışma · son 50 saklanır
+        <span className="text-xs text-slate-500 dark:text-stone-400">
+          {entries.length} kayıtlı çalışma · son 50 saklanır
         </span>
         <Button size="sm" variant="secondary" onClick={clear}>
           Geçmişi Temizle
@@ -63,13 +67,13 @@ export function RunHistoryTable() {
       </div>
       <Card>
         <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+          <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-surface-line dark:bg-surface-2/30 dark:text-stone-400">
             <tr>
-              <th className="px-4 py-3 text-left">Run #</th>
-              <th className="px-4 py-3 text-left">Tetikleyen</th>
-              <th className="px-4 py-3 text-left">Durum</th>
-              <th className="px-4 py-3 text-right">Job (tamam/toplam)</th>
-              <th className="px-4 py-3 text-left">Bitiş</th>
+              <th className="px-4 py-3 text-left font-medium">Run #</th>
+              <th className="px-4 py-3 text-left font-medium">Tetikleyen</th>
+              <th className="px-4 py-3 text-left font-medium">Durum</th>
+              <th className="px-4 py-3 text-right font-medium">Job (tamam/toplam)</th>
+              <th className="px-4 py-3 text-left font-medium">Bitiş</th>
             </tr>
           </thead>
           <tbody>
@@ -83,23 +87,23 @@ export function RunHistoryTable() {
               return (
                 <tr
                   key={r.run_id}
-                  className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                  className="border-b border-slate-100 transition-colors last:border-0 hover:bg-brand-50/40 dark:border-surface-line/50 dark:hover:bg-surface-2/40"
                 >
                   <td className="px-4 py-3 font-mono text-xs">
                     <Link
                       to={`/runs/${r.run_id}`}
-                      className="text-slate-900 hover:underline"
+                      className="text-slate-900 hover:text-brand-700 hover:underline dark:text-stone-200 dark:hover:text-brand-300"
                     >
                       #{r.run_id}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-xs">
+                  <td className="px-4 py-3 text-xs text-slate-700 dark:text-stone-300">
                     {r.trigger === 'sku' ? (
                       <span>
                         SKU:{' '}
                         <Link
                           to={`/skus/${encodeURIComponent(r.sku ?? '')}`}
-                          className="font-mono hover:underline"
+                          className="font-mono text-brand-700 hover:underline dark:text-brand-300"
                         >
                           {r.sku}
                         </Link>
@@ -110,7 +114,7 @@ export function RunHistoryTable() {
                   </td>
                   <td className="px-4 py-3">
                     {r.isError ? (
-                      <span className="text-xs text-red-600">
+                      <span className="text-xs text-rose-600 dark:text-rose-400">
                         ulaşılamadı
                       </span>
                     ) : s ? (
@@ -122,17 +126,17 @@ export function RunHistoryTable() {
                         {s.status}
                       </span>
                     ) : (
-                      <span className="text-xs text-slate-400">…</span>
+                      <span className="text-xs text-slate-400 dark:text-stone-200/30">…</span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums">
+                  <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-stone-200">
                     {s
                       ? `${s.jobs.completed}/${total}${
                           s.jobs.failed ? ` (${s.jobs.failed} ✗)` : ''
                         }`
                       : '—'}
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-500">
+                  <td className="px-4 py-3 font-mono text-[11px] text-slate-500 dark:text-stone-400">
                     {s?.completed_at ? s.completed_at.slice(0, 19) : '—'}
                   </td>
                 </tr>

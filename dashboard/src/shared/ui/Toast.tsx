@@ -46,10 +46,11 @@ function useToasts(): ToastItem[] {
 
 const typeClasses: Record<ToastType, string> = {
   success:
-    'border-green-200 bg-green-50 text-green-800 dark:border-green-800 dark:bg-green-900/30 dark:text-green-300',
+    'border-teal-300 bg-teal-50 text-teal-800 dark:border-teal-500/40 dark:bg-teal-900/30 dark:text-teal-200',
   error:
-    'border-red-200 bg-red-50 text-red-800 dark:border-red-800 dark:bg-red-900/30 dark:text-red-300',
-  info: 'border-slate-200 bg-white text-slate-800 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200',
+    'border-rose-300 bg-rose-50 text-rose-800 dark:border-rose-500/40 dark:bg-rose-900/30 dark:text-rose-200',
+  info:
+    'border-slate-200 bg-white text-slate-800 dark:border-surface-line dark:bg-surface-2 dark:text-stone-100',
 };
 
 export function ToastViewport(): ReactNode {

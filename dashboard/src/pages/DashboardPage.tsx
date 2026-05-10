@@ -7,23 +7,28 @@ import { RunTrigger } from '@/features/run-control/RunTrigger';
 export function DashboardPage() {
   return (
     <div className="space-y-6">
-      <div className="flex items-end justify-between">
+      <header className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Ana Ekran</h1>
-          <p className="text-sm text-slate-500">
-            Tüm SKU'lar aciliyet sırasına göre listelenir. Kırmızı satırlar
-            öncelikli siparişler.
+          <h1 className="text-xl font-medium text-slate-900 dark:text-stone-50">
+            Ana Ekran
+          </h1>
+          <p className="mt-1 text-sm text-slate-500 dark:text-stone-400">
+            Tüm SKU&apos;lar aciliyet sırasına göre listelenir. Kırmızı satırlar
+            öncelikli sipariş gerektirir.
           </p>
         </div>
         <RunTrigger />
-      </div>
+      </header>
+
       <PortfolioSummary />
+
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         <div className="lg:col-span-2">
           <AbcMatrix />
         </div>
         <UrgencyLegend />
       </div>
+
       <SkuTable />
     </div>
   );
