@@ -1,10 +1,11 @@
 import { useParams, Link } from 'react-router-dom';
-import { useRunStatus } from '@/shared/api/hooks';
+import { useRunJobs, useRunStatus } from '@/shared/api/hooks';
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card';
 import { Stat } from '@/shared/ui/Stat';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { fmtInt } from '@/shared/lib/format';
+import { JobBreakdownTable } from '@/features/run-detail/JobBreakdownTable';
 
 const STATUS_TONES: Record<string, string> = {
   queued:
@@ -21,6 +22,7 @@ export function RunDetailPage() {
   const { runId = '' } = useParams<{ runId: string }>();
   const idNum = Number(runId);
   const status = useRunStatus(Number.isFinite(idNum) ? idNum : null);
+  const jobs = useRunJobs(Number.isFinite(idNum) ? idNum : null);
 
   if (status.isLoading) {
     return <Skeleton className="h-32 w-full" />;
@@ -78,6 +80,12 @@ export function RunDetailPage() {
           tone={s.jobs.failed > 0 ? 'critical' : 'default'}
         />
       </div>
+
+      {jobs.data ? (
+        <JobBreakdownTable jobs={jobs.data.jobs} />
+      ) : (
+        <Skeleton className="h-64 w-full" />
+      )}
 
       <Card>
         <CardHeader title="Detaylar" />

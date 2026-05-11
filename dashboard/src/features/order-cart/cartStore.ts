@@ -1,12 +1,25 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 
+/** Policy context captured at "add to cart" time so the cart can run
+ *  portfolio-wide what-if sliders (q_target, h_cover) without going back
+ *  to the worker. Optional because legacy cart items don't have it. */
+export interface CartPolicyContext {
+  starting_stock: number;
+  cum_demand_q: number;
+  q_target: number;
+  h_cover: number;
+  moq: number;
+  lot_size: number;
+}
+
 export interface CartItem {
   sku: string;
   suggested_qty: number;
   approved_qty: number;
   note?: string;
   added_at: string;
+  policy?: CartPolicyContext;
 }
 
 interface CartState {

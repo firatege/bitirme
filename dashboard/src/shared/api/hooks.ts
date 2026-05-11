@@ -26,11 +26,77 @@ export function useSkuHistory(sku: string, limit = 20) {
   });
 }
 
+export function useSkuTimeseries(sku: string, months = 24) {
+  return useQuery({
+    queryKey: queryKeys.skuTimeseries(sku, months),
+    queryFn: () => dataSource.getSkuTimeseries(sku, months),
+    enabled: !!sku,
+    staleTime: 5 * 60_000,
+  });
+}
+
+export function useSkuPredictions(sku: string, runId?: number) {
+  return useQuery({
+    queryKey: queryKeys.skuPredictions(sku, runId),
+    queryFn: () => dataSource.getSkuPredictions(sku, runId),
+    enabled: !!sku,
+    staleTime: 5 * 60_000,
+  });
+}
+
 export function useSkuList() {
   return useQuery({
     queryKey: queryKeys.skuList(),
     queryFn: () => dataSource.listSkus(),
     staleTime: 5 * 60_000,
+  });
+}
+
+export function useSkuPin(sku: string) {
+  return useQuery({
+    queryKey: queryKeys.skuPin(sku),
+    queryFn: () => dataSource.getSkuPin(sku),
+    enabled: !!sku,
+    staleTime: 60_000,
+  });
+}
+
+export function useSetSkuPin(sku: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (runId: number) => dataSource.setSkuPin(sku, runId),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.skuPin(sku) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuLatest(sku) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuPredictions(sku, undefined) });
+    },
+  });
+}
+
+export function useClearSkuPin(sku: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => dataSource.clearSkuPin(sku),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.skuPin(sku) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuLatest(sku) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuPredictions(sku, undefined) });
+    },
+  });
+}
+
+export function useRunJobs(runId: number | null) {
+  return useQuery({
+    queryKey: runId ? queryKeys.runJobs(runId) : ['run-jobs', 'none'],
+    queryFn: () => dataSource.getRunJobs(runId as number),
+    enabled: runId !== null,
+    refetchInterval: (query) => {
+      const jobs = query.state.data?.jobs ?? [];
+      const inFlight = jobs.some(
+        (j) => j.status === 'queued' || j.status === 'claimed' || j.status === 'running',
+      );
+      return inFlight ? 3_000 : false;
+    },
   });
 }
 

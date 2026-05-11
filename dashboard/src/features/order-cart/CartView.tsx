@@ -5,14 +5,17 @@ import { cartToCsv, downloadCsv } from './exportCsv';
 import {
   groupBySupplier,
   loadSupplierMap,
-  UNASSIGNED_SUPPLIER,
   type SupplierGroup,
 } from './SupplierGrouping';
 import { Button } from '@/shared/ui/Button';
 import { Card, CardBody, CardHeader } from '@/shared/ui/Card';
 import { EmptyState } from '@/shared/ui/EmptyState';
-import { fmtInt } from '@/shared/lib/format';
+import { fmtInt, fmtPct } from '@/shared/lib/format';
 import { cn } from '@/shared/lib/cn';
+import {
+  approxRescaleCumDemand,
+  recomputeOrderQty,
+} from '@/entities/recommendation/policy';
 
 export function CartView() {
   const items = useCartStore((s) => s.items);
@@ -24,6 +27,11 @@ export function CartView() {
   const [budget, setBudget] = useState<number>(100_000);
   const [unitCost, setUnitCost] = useState<number>(1);
 
+  // Portfolio-wide what-if knobs. Null means "use each item's original q/H".
+  const [sensitivityOn, setSensitivityOn] = useState(false);
+  const [qOverride, setQOverride] = useState<number>(0.5);
+  const [hCoverOverride, setHCoverOverride] = useState<number>(6);
+
   const { data: supplierMap = {} } = useQuery({
     queryKey: ['supplier-map'],
     queryFn: loadSupplierMap,
@@ -31,7 +39,49 @@ export function CartView() {
   });
 
   const rows = Object.values(items);
-  const totalQty = rows.reduce((s, r) => s + r.approved_qty, 0);
+
+  // Apply the portfolio-wide what-if to compute a preview qty per SKU. We
+  // don't mutate approved_qty — the slider preview is non-destructive so
+  // the user can compare and choose to "apply" if they like the result.
+  const previewByeSku = useMemo(() => {
+    if (!sensitivityOn) return new Map<string, number>();
+    const m = new Map<string, number>();
+    for (const r of rows) {
+      const p = r.policy;
+      if (!p) continue;
+      const adjustedDemand = approxRescaleCumDemand({
+        origCumDemandQ: p.cum_demand_q,
+        origQ: p.q_target,
+        origHCover: p.h_cover,
+        newQ: qOverride,
+        newHCover: hCoverOverride,
+      });
+      const { rounded } = recomputeOrderQty({
+        startingStock: p.starting_stock,
+        cumDemandQ: adjustedDemand,
+        moq: p.moq,
+        lotSize: p.lot_size,
+      });
+      m.set(r.sku, rounded);
+    }
+    return m;
+  }, [sensitivityOn, rows, qOverride, hCoverOverride]);
+
+  const applySensitivity = () => {
+    for (const [sku, qty] of previewByeSku) {
+      update(sku, { approved_qty: qty });
+    }
+    setSensitivityOn(false);
+  };
+
+  const skusMissingContext = sensitivityOn
+    ? rows.filter((r) => !r.policy).length
+    : 0;
+
+  const totalQty = rows.reduce(
+    (s, r) => s + (previewByeSku.get(r.sku) ?? r.approved_qty),
+    0,
+  );
   const totalCost = totalQty * unitCost;
 
   const groups = useMemo(
@@ -94,6 +144,75 @@ export function CartView() {
 
       <Card className="print:hidden">
         <CardHeader
+          title="Senaryo (ne-eğer)"
+          subtitle="Hizmet seviyesi ve kapsama ufkunu portföy genelinde değiştir; önizleme grileşmiş satırlarda görünür"
+          action={
+            <label className="flex items-center gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={sensitivityOn}
+                onChange={(e) => setSensitivityOn(e.target.checked)}
+              />
+              Aktif
+            </label>
+          }
+        />
+        {sensitivityOn && (
+          <CardBody className="space-y-3 text-sm">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-slate-600 dark:text-stone-300">
+                    Hizmet seviyesi (q):{' '}
+                    <strong>{fmtPct(qOverride)}</strong>
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0.5}
+                  max={0.99}
+                  step={0.01}
+                  value={qOverride}
+                  onChange={(e) => setQOverride(Number(e.target.value))}
+                  className="w-full"
+                />
+              </div>
+              <div>
+                <div className="mb-1 flex items-center justify-between text-xs">
+                  <span className="text-slate-600 dark:text-stone-300">
+                    Kapsama ufku:{' '}
+                    <strong>{hCoverOverride} ay</strong>
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={18}
+                  step={1}
+                  value={hCoverOverride}
+                  onChange={(e) =>
+                    setHCoverOverride(Number(e.target.value))
+                  }
+                  className="w-full"
+                />
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <Button size="sm" onClick={applySensitivity}>
+                Tüm satırlara uygula
+              </Button>
+              {skusMissingContext > 0 && (
+                <span className="ml-auto text-amber-700 dark:text-amber-300">
+                  {skusMissingContext} satırda politika bağlamı yok
+                </span>
+              )}
+            </div>
+          </CardBody>
+        )}
+      </Card>
+
+      <Card className="print:hidden">
+        <CardHeader
           title="Bütçe Modu"
           subtitle="Bütçeyi aşan satırlar grileşir; en yüksek miktardan başlar"
           action={
@@ -131,7 +250,7 @@ export function CartView() {
             <div className="col-span-2 text-xs text-slate-600">
               {overBudgetSet.size > 0 && (
                 <span className="text-orange-700">
-                  ⚠ {overBudgetSet.size} satır bütçe dışı kalıyor
+                  {overBudgetSet.size} satır bütçe dışı kalıyor
                 </span>
               )}
             </div>
@@ -170,6 +289,11 @@ export function CartView() {
                   <tr>
                     <th className="px-4 py-2 text-left font-medium">SKU</th>
                     <th className="px-4 py-2 text-right font-medium">Önerilen</th>
+                    {sensitivityOn && (
+                      <th className="px-4 py-2 text-right font-medium text-amber-700 dark:text-amber-300">
+                        Önizleme
+                      </th>
+                    )}
                     <th className="px-4 py-2 text-right font-medium">Onaylanan</th>
                     <th className="px-4 py-2 text-left font-medium">Not</th>
                     <th className="px-4 py-2 print:hidden"></th>
@@ -191,6 +315,20 @@ export function CartView() {
                       <td className="px-4 py-2 text-right font-mono tabular-nums text-slate-700 dark:text-stone-300">
                         {fmtInt(r.suggested_qty)}
                       </td>
+                      {sensitivityOn && (
+                        <td className="px-4 py-2 text-right font-mono tabular-nums">
+                          {previewByeSku.has(r.sku) ? (
+                            <PreviewCell
+                              preview={previewByeSku.get(r.sku) ?? 0}
+                              baseline={r.approved_qty}
+                            />
+                          ) : (
+                            <span className="text-slate-400 dark:text-stone-500">
+                              —
+                            </span>
+                          )}
+                        </td>
+                      )}
                       <td className="px-4 py-2 text-right">
                         <input
                           type="number"
@@ -232,15 +370,32 @@ export function CartView() {
         ))}
       </div>
 
-      {groups.some((g) => g.supplier === UNASSIGNED_SUPPLIER) && (
-        <p className="text-xs text-slate-500 print:hidden">
-          💡 Tedarikçi atanmamış SKU'lar için{' '}
-          <code className="rounded bg-slate-100 px-1">
-            dashboard/public/supplier_map.json
-          </code>{' '}
-          dosyasını düzenleyin.
-        </p>
-      )}
     </div>
+  );
+}
+
+function PreviewCell({
+  preview,
+  baseline,
+}: {
+  preview: number;
+  baseline: number;
+}) {
+  const diff = preview - baseline;
+  const tone =
+    diff === 0
+      ? 'text-slate-500 dark:text-stone-400'
+      : diff > 0
+        ? 'text-amber-700 dark:text-amber-300'
+        : 'text-emerald-700 dark:text-emerald-300';
+  const arrow = diff === 0 ? '=' : diff > 0 ? '▲' : '▼';
+  return (
+    <span className={tone}>
+      {fmtInt(preview)}{' '}
+      <span className="ml-1 text-[10px]">
+        {arrow} {diff > 0 ? '+' : ''}
+        {fmtInt(diff)}
+      </span>
+    </span>
   );
 }

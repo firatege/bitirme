@@ -1,10 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   useSkuHistory,
   useSkuLatest,
+  useSkuPredictions,
+  useSkuTimeseries,
   useTriggerSkuForecast,
+  useRunStatus,
 } from '@/shared/api/hooks';
+import { queryKeys } from '@/shared/api/queryKeys';
 import { Skeleton } from '@/shared/ui/Skeleton';
 import { ErrorState } from '@/shared/ui/ErrorState';
 import { EmptyState } from '@/shared/ui/EmptyState';
@@ -17,28 +23,92 @@ import { OrderBreakdownCard } from '@/features/sku-detail/OrderBreakdownCard';
 import { ModelProvenancePanel } from '@/features/sku-detail/ModelProvenancePanel';
 import { StockoutGauge } from '@/features/sku-detail/StockoutGauge';
 import { HistoryChart } from '@/features/sku-detail/HistoryChart';
+import { DemandHistoryChart } from '@/features/sku-detail/DemandHistoryChart';
+import { WhyThisNumberCard } from '@/features/sku-detail/WhyThisNumberCard';
+import { RunDeltaCard } from '@/features/sku-detail/RunDeltaCard';
+import { AnomalyFlagCard } from '@/features/sku-detail/AnomalyFlagCard';
+import { BaselineComparisonCard } from '@/features/sku-detail/BaselineComparisonCard';
+import { RunPinControl } from '@/features/sku-detail/RunPinControl';
+import { RunProgressBadge } from '@/features/run-control/RunProgressBadge';
 import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 
+const SKU_RUN_KEY = (sku: string) => `bitirme.skuRun.${sku}`;
+
+function readPersistedRunId(sku: string): number | null {
+  if (!sku || typeof localStorage === 'undefined') return null;
+  const raw = localStorage.getItem(SKU_RUN_KEY(sku));
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function persistRunId(sku: string, runId: number | null): void {
+  if (!sku || typeof localStorage === 'undefined') return;
+  try {
+    if (runId == null) {
+      localStorage.removeItem(SKU_RUN_KEY(sku));
+    } else {
+      localStorage.setItem(SKU_RUN_KEY(sku), String(runId));
+    }
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 export function SkuDetailPage() {
+  const { t } = useTranslation();
   const { sku = '' } = useParams<{ sku: string }>();
+  const qc = useQueryClient();
   const latest = useSkuLatest(sku);
   const history = useSkuHistory(sku);
+  const timeseries = useSkuTimeseries(sku);
+  const predictions = useSkuPredictions(sku);
   const trigger = useTriggerSkuForecast();
   const recordRun = useRunHistoryStore((s) => s.record);
   const [showConfirm, setShowConfirm] = useState(false);
+  const [activeRunId, setActiveRunId] = useState<number | null>(() =>
+    readPersistedRunId(sku),
+  );
+  const runStatus = useRunStatus(activeRunId);
+
+  // Switch the persisted runId when navigating between SKUs.
+  useEffect(() => {
+    setActiveRunId(readPersistedRunId(sku));
+  }, [sku]);
+
+  // When the run finishes, refresh the SKU panels so the user sees the new
+  // recommendation/forecast without manually reloading. Clear the badge after
+  // a minute so it doesn't linger forever on a completed run.
+  useEffect(() => {
+    const s = runStatus.data;
+    if (!s) return;
+    if (s.status === 'completed' || s.status === 'failed') {
+      qc.invalidateQueries({ queryKey: queryKeys.skuLatest(sku) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuPredictions(sku, undefined) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuTimeseries(sku, 24) });
+      qc.invalidateQueries({ queryKey: queryKeys.skuHistory(sku, 20) });
+      const timer = window.setTimeout(() => {
+        persistRunId(sku, null);
+        setActiveRunId(null);
+      }, 60_000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [runStatus.data, sku, qc]);
 
   const handleConfirm = async () => {
     setShowConfirm(false);
     try {
       const res = await trigger.mutateAsync(sku);
+      setActiveRunId(res.run_id);
+      persistRunId(sku, res.run_id);
       recordRun({ run_id: res.run_id, trigger: 'sku', sku });
       toast(
-        `Run #${res.run_id} kuyruğa eklendi (${res.jobs} job)`,
+        t('run_trigger.queued', { runId: res.run_id, jobs: res.jobs }),
         'success',
       );
     } catch (e) {
       toast(
-        e instanceof Error ? e.message : 'Run tetiklenemedi',
+        e instanceof Error ? e.message : t('run_trigger.failed'),
         'error',
       );
     }
@@ -107,16 +177,30 @@ export function SkuDetailPage() {
           {sku}
         </h1>
         <UrgencyBadge level={level} />
-        <Button
-          variant="secondary"
-          size="sm"
-          className="ml-auto"
-          onClick={() => setShowConfirm(true)}
-          disabled={trigger.isPending}
-        >
-          {trigger.isPending ? 'Tetikleniyor…' : 'Bu SKU için yeniden çalıştır'}
-        </Button>
+        <div className="ml-auto flex items-center gap-3">
+          <RunProgressBadge runId={activeRunId} />
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => setShowConfirm(true)}
+            disabled={trigger.isPending}
+          >
+            {trigger.isPending ? t('run_trigger.triggering') : 'Bu SKU için yeniden çalıştır'}
+          </Button>
+        </div>
       </div>
+
+      {history.data && history.data.history.length >= 3 && (
+        <AnomalyFlagCard history={history.data.history} />
+      )}
+
+      {detail.recommendation && (
+        <WhyThisNumberCard recommendation={detail.recommendation} />
+      )}
+
+      {history.data && history.data.history.length >= 2 && (
+        <RunDeltaCard history={history.data.history} />
+      )}
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
         {detail.recommendation && (
@@ -134,8 +218,23 @@ export function SkuDetailPage() {
         {detail.winning && <ModelProvenancePanel win={detail.winning} />}
       </div>
 
+      <DemandHistoryChart
+        points={timeseries.data?.points}
+        predictions={predictions.data?.points}
+        isLoading={timeseries.isLoading}
+      />
+
+      <BaselineComparisonCard
+        timeseries={timeseries.data?.points}
+        predictions={predictions.data?.points}
+      />
+
       {history.data && history.data.history.length > 0 && (
         <HistoryChart entries={history.data.history} />
+      )}
+
+      {history.data && history.data.history.length > 0 && (
+        <RunPinControl sku={sku} history={history.data.history} />
       )}
     </div>
   );

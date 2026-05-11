@@ -48,6 +48,9 @@ export const SkuHistoryEntrySchema = z.object({
   winning_phase: z.string().nullable().optional(),
   winning_mae: z.number().nullable().optional(),
   completed_at: z.string().nullable().optional(),
+  starting_stock: z.number().nullable().optional(),
+  cum_demand_q: z.number().nullable().optional(),
+  order_qty_rounded: z.number().nullable().optional(),
 });
 export type SkuHistoryEntry = z.infer<typeof SkuHistoryEntrySchema>;
 
@@ -56,3 +59,35 @@ export const SkuHistorySchema = z.object({
   history: z.array(SkuHistoryEntrySchema),
 });
 export type SkuHistory = z.infer<typeof SkuHistorySchema>;
+
+export const SkuTimeseriesPointSchema = z.object({
+  ds: z.string(),
+  y: z.number().nullable(),
+  orders: z.number().nullable(),
+  stock: z.number().nullable(),
+});
+export type SkuTimeseriesPoint = z.infer<typeof SkuTimeseriesPointSchema>;
+
+export const SkuTimeseriesSchema = z.object({
+  sku: z.string(),
+  points: z.array(SkuTimeseriesPointSchema),
+});
+export type SkuTimeseries = z.infer<typeof SkuTimeseriesSchema>;
+
+export const SkuPredictionPointSchema = z.object({
+  ds: z.string(),
+  y: z.number().nullable(),
+  yhat: z.number(),
+  pi80_lo: z.number().nullable(),
+  pi80_hi: z.number().nullable(),
+  pi95_lo: z.number().nullable(),
+  pi95_hi: z.number().nullable(),
+});
+export type SkuPredictionPoint = z.infer<typeof SkuPredictionPointSchema>;
+
+export const SkuPredictionsSchema = z.object({
+  sku: z.string(),
+  run_id: z.number().nullable(),
+  points: z.array(SkuPredictionPointSchema),
+});
+export type SkuPredictions = z.infer<typeof SkuPredictionsSchema>;

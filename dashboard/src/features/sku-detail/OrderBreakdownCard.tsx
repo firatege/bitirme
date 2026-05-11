@@ -191,7 +191,19 @@ export function OrderBreakdownCard({
         <div className="flex gap-2">
           <Button
             onClick={() => {
-              add({ sku, suggested_qty: rounded, approved_qty: rounded });
+              add({
+                sku,
+                suggested_qty: rounded,
+                approved_qty: rounded,
+                policy: {
+                  starting_stock: stock,
+                  cum_demand_q: adjustedDemand,
+                  q_target: q,
+                  h_cover: hCover,
+                  moq,
+                  lot_size: lot,
+                },
+              });
               toast(`${sku} sepete eklendi`, 'success');
             }}
             className="flex-1"

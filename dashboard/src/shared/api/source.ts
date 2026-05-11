@@ -5,20 +5,34 @@ import { env } from '@/shared/config/env';
 import {
   SkuDetailSchema,
   SkuHistorySchema,
+  SkuPredictionsSchema,
+  SkuTimeseriesSchema,
   type SkuDetail,
   type SkuHistory,
+  type SkuPredictions,
+  type SkuTimeseries,
 } from '@/entities/sku/schema';
 import {
   CreateRunResponseSchema,
+  RunJobsSchema,
   RunStatusSchema,
+  SkuPinSchema,
   type CreateRunResponse,
+  type RunJobs,
   type RunStatus,
+  type SkuPin,
 } from '@/entities/run/schema';
 
 export interface ForecastDataSource {
   getSkuLatest(sku: string): Promise<SkuDetail>;
   getSkuHistory(sku: string, limit?: number): Promise<SkuHistory>;
+  getSkuTimeseries(sku: string, months?: number): Promise<SkuTimeseries>;
+  getSkuPredictions(sku: string, runId?: number): Promise<SkuPredictions>;
   getRunStatus(runId: number): Promise<RunStatus>;
+  getRunJobs(runId: number): Promise<RunJobs>;
+  getSkuPin(sku: string): Promise<SkuPin>;
+  setSkuPin(sku: string, runId: number): Promise<SkuPin>;
+  clearSkuPin(sku: string): Promise<SkuPin>;
   createRun(body: { concurrency?: number; check_drift?: boolean }): Promise<CreateRunResponse>;
   triggerSkuForecast(sku: string): Promise<CreateRunResponse>;
   listSkus(): Promise<string[]>;
@@ -35,9 +49,41 @@ class ControllerAdapter implements ForecastDataSource {
     return SkuHistorySchema.parse(data);
   }
 
+  async getSkuTimeseries(sku: string, months = 24): Promise<SkuTimeseries> {
+    const { data } = await apiClient.get(endpoints.skuTimeseries(sku, months));
+    return SkuTimeseriesSchema.parse(data);
+  }
+
+  async getSkuPredictions(sku: string, runId?: number): Promise<SkuPredictions> {
+    const { data } = await apiClient.get(endpoints.skuPredictions(sku, runId));
+    return SkuPredictionsSchema.parse(data);
+  }
+
   async getRunStatus(runId: number): Promise<RunStatus> {
     const { data } = await apiClient.get(endpoints.run(runId));
     return RunStatusSchema.parse(data);
+  }
+
+  async getRunJobs(runId: number): Promise<RunJobs> {
+    const { data } = await apiClient.get(endpoints.runJobs(runId));
+    return RunJobsSchema.parse(data);
+  }
+
+  async getSkuPin(sku: string): Promise<SkuPin> {
+    const { data } = await apiClient.get(endpoints.skuPin(sku));
+    return SkuPinSchema.parse(data);
+  }
+
+  async setSkuPin(sku: string, runId: number): Promise<SkuPin> {
+    const { data } = await apiClient.post(endpoints.skuPin(sku), {
+      run_id: runId,
+    });
+    return SkuPinSchema.parse(data);
+  }
+
+  async clearSkuPin(sku: string): Promise<SkuPin> {
+    const { data } = await apiClient.delete(endpoints.skuPin(sku));
+    return SkuPinSchema.parse(data);
   }
 
   async createRun(body: {
@@ -60,10 +106,28 @@ class ControllerAdapter implements ForecastDataSource {
       );
       return [...FIXTURE_SKUS];
     }
+    const fromApi = await this.fetchApiSkus();
+    if (fromApi.length > 0) {
+      // API is the source of truth — only augment with locally-seen SKUs that
+      // the backend already knows about would be redundant, so we trust the API.
+      return [...fromApi].sort();
+    }
+    // Fallback: API unreachable or empty. Merge build-time static list with
+    // locally-seen SKUs so the UI still renders something.
     const fromStatic = await this.fetchStaticSkus();
     const fromLocal = readSeenSkus();
     const merged = new Set<string>([...fromStatic, ...fromLocal]);
     return [...merged].sort();
+  }
+
+  private async fetchApiSkus(): Promise<string[]> {
+    try {
+      const { data } = await apiClient.get(endpoints.skus);
+      const payload = data as { skus?: string[] };
+      return payload.skus ?? [];
+    } catch {
+      return [];
+    }
   }
 
   private async fetchStaticSkus(): Promise<string[]> {

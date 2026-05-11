@@ -23,3 +23,30 @@ export const CreateRunResponseSchema = z.object({
   status: z.string(),
 });
 export type CreateRunResponse = z.infer<typeof CreateRunResponseSchema>;
+
+export const RunJobSchema = z.object({
+  job_id: z.number(),
+  sku: z.string(),
+  status: z.string(),
+  attempts: z.number(),
+  claimed_by: z.string().nullable().optional(),
+  claimed_at: z.string().nullable().optional(),
+  last_error: z.string().nullable().optional(),
+  winning_mae: z.number().nullable().optional(),
+  sku_mode: z.string().nullable().optional(),
+});
+export type RunJob = z.infer<typeof RunJobSchema>;
+
+export const RunJobsSchema = z.object({
+  run_id: z.number(),
+  jobs: z.array(RunJobSchema),
+});
+export type RunJobs = z.infer<typeof RunJobsSchema>;
+
+export const SkuPinSchema = z.object({
+  sku: z.string(),
+  pinned_run_id: z.number().nullable(),
+  pinned_at: z.string().nullable().optional(),
+  pinned_by: z.string().nullable().optional(),
+});
+export type SkuPin = z.infer<typeof SkuPinSchema>;

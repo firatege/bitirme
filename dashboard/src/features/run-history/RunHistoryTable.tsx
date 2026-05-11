@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQueries } from '@tanstack/react-query';
 import { dataSource } from '@/shared/api/source';
 import { queryKeys } from '@/shared/api/queryKeys';
@@ -22,6 +22,7 @@ const STATUS_TONE: Record<string, string> = {
 export function RunHistoryTable() {
   const entries = useRunHistoryStore((s) => s.entries);
   const clear = useRunHistoryStore((s) => s.clear);
+  const navigate = useNavigate();
 
   const queries = useQueries({
     queries: entries.map((e) => ({
@@ -87,15 +88,21 @@ export function RunHistoryTable() {
               return (
                 <tr
                   key={r.run_id}
-                  className="border-b border-slate-100 transition-colors last:border-0 hover:bg-brand-50/40 dark:border-surface-line/50 dark:hover:bg-surface-2/40"
+                  onClick={() => navigate(`/runs/${r.run_id}`)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      navigate(`/runs/${r.run_id}`);
+                    }
+                  }}
+                  role="link"
+                  tabIndex={0}
+                  className="cursor-pointer border-b border-slate-100 transition-colors last:border-0 hover:bg-brand-50/40 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-brand-400 dark:border-surface-line/50 dark:hover:bg-surface-2/40"
                 >
                   <td className="px-4 py-3 font-mono text-xs">
-                    <Link
-                      to={`/runs/${r.run_id}`}
-                      className="text-slate-900 hover:text-brand-700 hover:underline dark:text-stone-200 dark:hover:text-brand-300"
-                    >
+                    <span className="text-slate-900 dark:text-stone-200">
                       #{r.run_id}
-                    </Link>
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-xs text-slate-700 dark:text-stone-300">
                     {r.trigger === 'sku' ? (
@@ -103,6 +110,7 @@ export function RunHistoryTable() {
                         SKU:{' '}
                         <Link
                           to={`/skus/${encodeURIComponent(r.sku ?? '')}`}
+                          onClick={(e) => e.stopPropagation()}
                           className="font-mono text-brand-700 hover:underline dark:text-brand-300"
                         >
                           {r.sku}
@@ -132,7 +140,7 @@ export function RunHistoryTable() {
                   <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-stone-200">
                     {s
                       ? `${s.jobs.completed}/${total}${
-                          s.jobs.failed ? ` (${s.jobs.failed} ✗)` : ''
+                          s.jobs.failed ? ` (${s.jobs.failed} hata)` : ''
                         }`
                       : '—'}
                   </td>
