@@ -428,6 +428,41 @@ impl<'a> Orchestrator<'a> {
         .await
         .context("insert sku_run_recommendation")?;
 
+        // Winning combo trajectory — clear any prior predictions for this run/sku
+        // (handles re-runs / warm overwrites) then bulk insert the new horizon.
+        sqlx::query("DELETE FROM sku_run_predictions WHERE run_id = $1 AND sku = $2")
+            .bind(result.run_id)
+            .bind(&result.sku)
+            .execute(&mut *tx)
+            .await
+            .context("clear sku_run_predictions")?;
+        for p in &result.predictions {
+            let ds = time::Date::parse(
+                &p.ds,
+                &time::format_description::well_known::Iso8601::DATE,
+            )
+            .with_context(|| format!("parse prediction ds={}", p.ds))?;
+            sqlx::query(
+                r#"
+                INSERT INTO sku_run_predictions
+                    (run_id, sku, ds, y, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                "#,
+            )
+            .bind(result.run_id)
+            .bind(&result.sku)
+            .bind(ds)
+            .bind(p.y)
+            .bind(p.yhat)
+            .bind(p.pi80_lo)
+            .bind(p.pi80_hi)
+            .bind(p.pi95_lo)
+            .bind(p.pi95_hi)
+            .execute(&mut *tx)
+            .await
+            .context("insert sku_run_predictions")?;
+        }
+
         tx.commit().await.context("commit persist_result transaction")?;
         Ok(())
     }

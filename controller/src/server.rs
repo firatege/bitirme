@@ -12,7 +12,7 @@
 
 use actix_cors::Cors;
 use actix_web::{
-    get, post,
+    delete, get, post,
     web::{Data, Json, Path, Query},
     App, HttpResponse, HttpServer, Responder, ResponseError,
 };
@@ -54,6 +54,13 @@ pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
             .service(forecast_sku)
             .service(get_sku_latest)
             .service(get_sku_history)
+            .service(get_sku_timeseries)
+            .service(get_sku_predictions)
+            .service(get_run_jobs)
+            .service(get_sku_pin)
+            .service(set_sku_pin)
+            .service(delete_sku_pin)
+            .service(list_skus)
     })
     .bind(addr)?
     .run()
@@ -298,18 +305,9 @@ async fn get_sku_latest(
     sku: Path<String>,
 ) -> Result<HttpResponse, ApiError> {
     let sku = sku.into_inner();
-    let row = sqlx::query(
-        r#"
-        SELECT run_id FROM sku_runs WHERE sku = $1 AND status = 'completed'
-        ORDER BY completed_at DESC NULLS LAST, run_id DESC LIMIT 1
-        "#,
-    )
-    .bind(&sku)
-    .fetch_optional(&state.pool)
-    .await?;
-    let run_id: i64 = row
-        .ok_or(ApiError::NotFound("sku"))?
-        .try_get("run_id")?;
+    let run_id: i64 = active_run_id(&state.pool, &sku)
+        .await?
+        .ok_or(ApiError::NotFound("sku"))?;
     let (run_row, rec) = sku_run_detail(&state.pool, run_id, &sku).await?;
     Ok(HttpResponse::Ok().json(build_sku_run_json(run_id, &sku, run_row, rec)?))
 }
@@ -329,11 +327,17 @@ async fn get_sku_history(
     let limit = q.limit.unwrap_or(20).clamp(1, 500);
     let rows = sqlx::query(
         r#"
-        SELECT run_id, status::text AS status, mode::text AS mode,
-               winning_exog, winning_y_variant::text AS winning_y_variant,
-               winning_phase::text AS winning_phase, winning_mae, completed_at::text AS completed_at
-        FROM sku_runs WHERE sku = $1
-        ORDER BY completed_at DESC NULLS LAST, run_id DESC
+        SELECT sr.run_id, sr.status::text AS status, sr.mode::text AS mode,
+               sr.winning_exog, sr.winning_y_variant::text AS winning_y_variant,
+               sr.winning_phase::text AS winning_phase,
+               sr.winning_mae, sr.completed_at::text AS completed_at,
+               rec.starting_stock, rec.cum_demand_q,
+               rec.order_qty_rounded
+        FROM sku_runs sr
+        LEFT JOIN sku_run_recommendation rec
+               ON rec.run_id = sr.run_id AND rec.sku = sr.sku
+        WHERE sr.sku = $1
+        ORDER BY sr.completed_at DESC NULLS LAST, sr.run_id DESC
         LIMIT $2
         "#,
     )
@@ -353,12 +357,317 @@ async fn get_sku_history(
             "winning_phase": r.try_get::<Option<String>, _>("winning_phase")?,
             "winning_mae": r.try_get::<Option<f64>, _>("winning_mae")?,
             "completed_at": r.try_get::<Option<String>, _>("completed_at")?,
+            "starting_stock": r.try_get::<Option<f64>, _>("starting_stock")?,
+            "cum_demand_q": r.try_get::<Option<f64>, _>("cum_demand_q")?,
+            "order_qty_rounded": r.try_get::<Option<f64>, _>("order_qty_rounded")?,
         }));
     }
     Ok(HttpResponse::Ok().json(serde_json::json!({"sku": sku, "history": out})))
 }
 
+#[derive(Debug, Deserialize)]
+struct TimeseriesParams {
+    months: Option<i64>,
+}
+
+/// GET /skus/{sku}/timeseries?months=24 — recent observed panel points for a SKU.
+///
+/// Returns the last N month-start rows from `sales_panel` ordered chronologically
+/// (oldest first), so the dashboard can render a demand/orders/stock history
+/// chart without having to load the full panel. `months` is clamped to [1, 120]
+/// and defaults to 24.
+#[get("/skus/{sku}/timeseries")]
+async fn get_sku_timeseries(
+    state: Data<AppState>,
+    sku: Path<String>,
+    q: Query<TimeseriesParams>,
+) -> Result<HttpResponse, ApiError> {
+    let sku = sku.into_inner();
+    let months = q.months.unwrap_or(24).clamp(1, 120);
+    let rows = sqlx::query(
+        r#"
+        SELECT ds::text AS ds, y, orders, stock
+        FROM (
+            SELECT ds, y, orders, stock
+            FROM sales_panel
+            WHERE sku = $1
+            ORDER BY ds DESC
+            LIMIT $2
+        ) recent
+        ORDER BY ds ASC
+        "#,
+    )
+    .bind(&sku)
+    .bind(months)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut points: Vec<Value> = Vec::with_capacity(rows.len());
+    for r in rows {
+        points.push(serde_json::json!({
+            "ds": r.try_get::<String, _>("ds")?,
+            "y": r.try_get::<Option<f64>, _>("y")?,
+            "orders": r.try_get::<Option<f64>, _>("orders")?,
+            "stock": r.try_get::<Option<f64>, _>("stock")?,
+        }));
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({"sku": sku, "points": points})))
+}
+
+/// GET /runs/{run_id}/jobs — per-SKU job breakdown for a run.
+///
+/// Returns one row per forecast_jobs entry: status, attempts, claimed_by,
+/// last_error (truncated server-side to keep the payload sane). Used by the
+/// RunDetailPage to show which SKUs are queued/running/done/failed instead of
+/// just the aggregate counter.
+#[get("/runs/{run_id}/jobs")]
+async fn get_run_jobs(
+    state: Data<AppState>,
+    path: Path<i64>,
+) -> Result<HttpResponse, ApiError> {
+    let run_id = path.into_inner();
+    let rows = sqlx::query(
+        r#"
+        SELECT j.job_id, j.sku,
+               j.status::text AS status,
+               j.attempts,
+               j.claimed_by,
+               j.claimed_at::text AS claimed_at,
+               LEFT(j.last_error, 2000) AS last_error,
+               sr.winning_mae,
+               sr.mode::text AS sku_mode
+        FROM forecast_jobs j
+        LEFT JOIN sku_runs sr ON sr.run_id = j.run_id AND sr.sku = j.sku
+        WHERE j.run_id = $1
+        ORDER BY
+            CASE j.status::text
+                WHEN 'failed' THEN 0
+                WHEN 'running' THEN 1
+                WHEN 'claimed' THEN 2
+                WHEN 'queued' THEN 3
+                WHEN 'completed' THEN 4
+                ELSE 5
+            END,
+            j.sku
+        "#,
+    )
+    .bind(run_id)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut jobs: Vec<Value> = Vec::with_capacity(rows.len());
+    for r in rows {
+        jobs.push(serde_json::json!({
+            "job_id": r.try_get::<i64, _>("job_id")?,
+            "sku": r.try_get::<String, _>("sku")?,
+            "status": r.try_get::<String, _>("status")?,
+            "attempts": r.try_get::<i32, _>("attempts")?,
+            "claimed_by": r.try_get::<Option<String>, _>("claimed_by")?,
+            "claimed_at": r.try_get::<Option<String>, _>("claimed_at")?,
+            "last_error": r.try_get::<Option<String>, _>("last_error")?,
+            "winning_mae": r.try_get::<Option<f64>, _>("winning_mae")?,
+            "sku_mode": r.try_get::<Option<String>, _>("sku_mode")?,
+        }));
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "run_id": run_id, "jobs": jobs
+    })))
+}
+
+/// GET /skus/{sku}/predictions — latest completed run's winning-combo trajectory.
+///
+/// Returns the per-month yhat + bootstrap PI bands so the dashboard can overlay
+/// the forecast on the demand history chart. Optional `run_id` query param pins
+/// a specific run; otherwise the most recently completed one is used.
+#[derive(Debug, Deserialize)]
+struct PredictionParams {
+    run_id: Option<i64>,
+}
+
+#[get("/skus/{sku}/predictions")]
+async fn get_sku_predictions(
+    state: Data<AppState>,
+    sku: Path<String>,
+    q: Query<PredictionParams>,
+) -> Result<HttpResponse, ApiError> {
+    let sku = sku.into_inner();
+    let run_id: Option<i64> = match q.run_id {
+        Some(id) => Some(id),
+        None => active_run_id(&state.pool, &sku).await?,
+    };
+    let Some(run_id) = run_id else {
+        return Ok(HttpResponse::Ok().json(serde_json::json!({
+            "sku": sku, "run_id": null, "points": []
+        })));
+    };
+
+    let rows = sqlx::query(
+        r#"
+        SELECT ds::text AS ds, y, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi
+        FROM sku_run_predictions
+        WHERE run_id = $1 AND sku = $2
+        ORDER BY ds ASC
+        "#,
+    )
+    .bind(run_id)
+    .bind(&sku)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let mut points: Vec<Value> = Vec::with_capacity(rows.len());
+    for r in rows {
+        points.push(serde_json::json!({
+            "ds": r.try_get::<String, _>("ds")?,
+            "y": r.try_get::<Option<f64>, _>("y")?,
+            "yhat": r.try_get::<f64, _>("yhat")?,
+            "pi80_lo": r.try_get::<Option<f64>, _>("pi80_lo")?,
+            "pi80_hi": r.try_get::<Option<f64>, _>("pi80_hi")?,
+            "pi95_lo": r.try_get::<Option<f64>, _>("pi95_lo")?,
+            "pi95_hi": r.try_get::<Option<f64>, _>("pi95_hi")?,
+        }));
+    }
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "sku": sku, "run_id": run_id, "points": points
+    })))
+}
+
+/// GET /skus — distinct SKU list known to the backend (from sales_panel).
+///
+/// The dashboard uses this to keep its SKU count consistent with what the
+/// controller will actually queue on `POST /runs`. Returns up to 1000 entries
+/// sorted lexicographically.
+#[get("/skus")]
+async fn list_skus(state: Data<AppState>) -> Result<HttpResponse, ApiError> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT sku FROM sales_panel ORDER BY sku LIMIT 1000",
+    )
+    .fetch_all(&state.pool)
+    .await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({"skus": rows})))
+}
+
 // --------------------------- Helpers ---------------------------
+
+/// Resolve the active run for a SKU — honour an explicit pin first, otherwise
+/// fall back to the most-recently-completed run. Returns None when the SKU
+/// has no completed history at all.
+async fn active_run_id(pool: &PgPool, sku: &str) -> Result<Option<i64>, ApiError> {
+    let row = sqlx::query_scalar::<_, i64>(
+        r#"
+        SELECT run_id FROM sku_runs
+        WHERE sku = $1 AND status = 'completed'
+          AND run_id = COALESCE(
+              (SELECT pinned_run_id FROM sku_active_pin WHERE sku = $1),
+              (SELECT run_id FROM sku_runs
+               WHERE sku = $1 AND status = 'completed'
+               ORDER BY completed_at DESC NULLS LAST, run_id DESC
+               LIMIT 1)
+          )
+        LIMIT 1
+        "#,
+    )
+    .bind(sku)
+    .fetch_optional(pool)
+    .await?;
+    Ok(row)
+}
+
+#[derive(Debug, Deserialize)]
+struct SetPinBody {
+    run_id: i64,
+    pinned_by: Option<String>,
+}
+
+/// GET /skus/{sku}/pin — return the currently pinned run for a SKU, if any.
+#[get("/skus/{sku}/pin")]
+async fn get_sku_pin(
+    state: Data<AppState>,
+    sku: Path<String>,
+) -> Result<HttpResponse, ApiError> {
+    let sku = sku.into_inner();
+    let row = sqlx::query(
+        r#"
+        SELECT pinned_run_id, pinned_at::text AS pinned_at, pinned_by
+        FROM sku_active_pin WHERE sku = $1
+        "#,
+    )
+    .bind(&sku)
+    .fetch_optional(&state.pool)
+    .await?;
+
+    if let Some(r) = row {
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "sku": sku,
+            "pinned_run_id": r.try_get::<i64, _>("pinned_run_id")?,
+            "pinned_at": r.try_get::<Option<String>, _>("pinned_at")?,
+            "pinned_by": r.try_get::<Option<String>, _>("pinned_by")?,
+        })))
+    } else {
+        Ok(HttpResponse::Ok().json(serde_json::json!({
+            "sku": sku, "pinned_run_id": null
+        })))
+    }
+}
+
+/// POST /skus/{sku}/pin — pin a SKU to a specific historical run. Upserts.
+#[post("/skus/{sku}/pin")]
+async fn set_sku_pin(
+    state: Data<AppState>,
+    sku: Path<String>,
+    body: Json<SetPinBody>,
+) -> Result<HttpResponse, ApiError> {
+    let sku = sku.into_inner();
+    let body = body.into_inner();
+
+    // Validate the run actually exists and completed for this SKU; otherwise
+    // future reads would silently return nothing and confuse the operator.
+    let exists: Option<i64> = sqlx::query_scalar(
+        "SELECT run_id FROM sku_runs WHERE sku = $1 AND run_id = $2 AND status = 'completed'",
+    )
+    .bind(&sku)
+    .bind(body.run_id)
+    .fetch_optional(&state.pool)
+    .await?;
+    if exists.is_none() {
+        return Err(ApiError::BadRequest(
+            "pinned run must exist and be completed for this SKU",
+        ));
+    }
+
+    sqlx::query(
+        r#"
+        INSERT INTO sku_active_pin (sku, pinned_run_id, pinned_by)
+        VALUES ($1, $2, $3)
+        ON CONFLICT (sku) DO UPDATE SET
+            pinned_run_id = EXCLUDED.pinned_run_id,
+            pinned_by = EXCLUDED.pinned_by,
+            pinned_at = NOW()
+        "#,
+    )
+    .bind(&sku)
+    .bind(body.run_id)
+    .bind(body.pinned_by.as_deref())
+    .execute(&state.pool)
+    .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "sku": sku, "pinned_run_id": body.run_id
+    })))
+}
+
+/// DELETE /skus/{sku}/pin — clear the pin, returning to "latest completed" behaviour.
+#[delete("/skus/{sku}/pin")]
+async fn delete_sku_pin(
+    state: Data<AppState>,
+    sku: Path<String>,
+) -> Result<HttpResponse, ApiError> {
+    let sku = sku.into_inner();
+    sqlx::query("DELETE FROM sku_active_pin WHERE sku = $1")
+        .bind(&sku)
+        .execute(&state.pool)
+        .await?;
+    Ok(HttpResponse::Ok().json(serde_json::json!({"sku": sku, "pinned_run_id": null})))
+}
 
 async fn sku_run_detail(
     pool: &PgPool,
@@ -367,12 +676,21 @@ async fn sku_run_detail(
 ) -> Result<(sqlx::postgres::PgRow, Option<sqlx::postgres::PgRow>), ApiError> {
     let run_row = sqlx::query(
         r#"
-        SELECT status::text AS status, mode::text AS mode,
-               winning_horizon::text AS winning_horizon, winning_exog,
-               winning_y_variant::text AS winning_y_variant, winning_phase::text AS winning_phase,
-               winning_mae, winning_rmse, winning_w_rf, winning_w_xgb,
-               p_stockout_3m, p_stockout_6m, e_t_stockout_mo
-        FROM sku_runs WHERE run_id = $1 AND sku = $2
+        SELECT sr.status::text AS status, sr.mode::text AS mode,
+               sr.winning_horizon::text AS winning_horizon, sr.winning_exog,
+               sr.winning_y_variant::text AS winning_y_variant, sr.winning_phase::text AS winning_phase,
+               sr.winning_mae, sr.winning_rmse, sr.winning_w_rf, sr.winning_w_xgb,
+               sr.p_stockout_3m, sr.p_stockout_6m, sr.e_t_stockout_mo,
+               (c.mape / 100.0) AS winning_mape  -- worker stores mape in percent (0-100); normalize to fraction (0-1)
+        FROM sku_runs sr
+        LEFT JOIN sku_run_combinations c
+          ON c.run_id = sr.run_id
+         AND c.sku = sr.sku
+         AND c.horizon = sr.winning_horizon
+         AND c.exog = sr.winning_exog
+         AND c.y_variant = sr.winning_y_variant
+         AND c.phase = sr.winning_phase
+        WHERE sr.run_id = $1 AND sr.sku = $2
         "#,
     )
     .bind(run_id)
@@ -409,6 +727,7 @@ fn build_sku_run_json(
         "phase": run_row.try_get::<Option<String>, _>("winning_phase")?,
         "mae": run_row.try_get::<Option<f64>, _>("winning_mae")?,
         "rmse": run_row.try_get::<Option<f64>, _>("winning_rmse")?,
+        "mape": run_row.try_get::<Option<f64>, _>("winning_mape")?,
         "w_rf": run_row.try_get::<Option<f64>, _>("winning_w_rf")?,
         "w_xgb": run_row.try_get::<Option<f64>, _>("winning_w_xgb")?,
         "p_stockout_3m": run_row.try_get::<Option<f64>, _>("p_stockout_3m")?,

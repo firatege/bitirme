@@ -11,6 +11,7 @@ import numpy as np
 import pandas as pd
 
 from services.worker.features.winsorize import nonneg, smooth_causal_ma, winsorize_series
+from services.worker.models.exog_carry_forward import build_exog_carry_forward
 from services.worker.models.exog_ets import ExogEts
 from services.worker.models.exog_ml_rf import MLExogRF
 from services.worker.models.exog_ml_xgb import MLExogXGB
@@ -131,6 +132,9 @@ def build_exog_by_method(
         return build_exog_ml(df_all, start_ds, end_ds, cutoff, "rf")
     if method == "ML-Exog XGB":
         return build_exog_ml(df_all, start_ds, end_ds, cutoff, "xgb")
+    if method == "CarryForward":
+        tbl = build_exog_carry_forward(df_all, start_ds, end_ds, cutoff)
+        return FittedExog(method="CarryForward", column_models={}, forecast=tbl)
     raise ValueError(f"Unknown EXOG method: {method}")
 
 

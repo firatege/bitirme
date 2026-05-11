@@ -11,13 +11,23 @@ use sqlx::{PgPool, Row};
 use crate::types::{CachedExogSelection, CachedModelRef, CachedSpec, CachedValResidual};
 
 pub async fn load_latest(pool: &PgPool, sku: &str) -> Result<Option<CachedSpec>> {
+    // Honour an active pin first; fall back to the actual most-recent completed
+    // run. This lets an operator soft-rollback to last month's model without
+    // having to delete or re-run anything.
     let row = sqlx::query(
         r#"
-        SELECT run_id, winning_horizon::text AS h, winning_exog, winning_y_variant::text AS v,
-               winning_phase::text AS ph, winning_w_rf, winning_w_xgb
-        FROM sku_runs
-        WHERE sku = $1 AND status = 'completed'
-        ORDER BY completed_at DESC NULLS LAST, run_id DESC
+        SELECT sr.run_id, sr.winning_horizon::text AS h, sr.winning_exog,
+               sr.winning_y_variant::text AS v, sr.winning_phase::text AS ph,
+               sr.winning_w_rf, sr.winning_w_xgb
+        FROM sku_runs sr
+        WHERE sr.sku = $1 AND sr.status = 'completed'
+          AND sr.run_id = COALESCE(
+              (SELECT pinned_run_id FROM sku_active_pin WHERE sku = $1),
+              (SELECT run_id FROM sku_runs
+               WHERE sku = $1 AND status = 'completed'
+               ORDER BY completed_at DESC NULLS LAST, run_id DESC
+               LIMIT 1)
+          )
         LIMIT 1
         "#,
     )

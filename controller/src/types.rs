@@ -172,6 +172,17 @@ pub struct ValResidualRow {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
+pub struct PredictionRow {
+    pub ds: String,
+    pub y: Option<f64>,
+    pub yhat: f64,
+    pub pi80_lo: Option<f64>,
+    pub pi80_hi: Option<f64>,
+    pub pi95_lo: Option<f64>,
+    pub pi95_hi: Option<f64>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct RecommendationRow {
     pub starting_stock: f64,
     pub t_check: i32,
@@ -198,6 +209,8 @@ pub struct ForecastResult {
     pub exog_selection: Vec<ExogSelectionRow>,
     #[serde(default)]
     pub val_residuals: Vec<ValResidualRow>,
+    #[serde(default)]
+    pub predictions: Vec<PredictionRow>,
     pub recommendation: RecommendationRow,
 }
 

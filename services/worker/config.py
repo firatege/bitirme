@@ -81,7 +81,7 @@ class WorkerConfig:
     tsb_near_zero_eps: float = _env_float("TSB_NEAR_ZERO_EPS", 1e-6)
 
     # Probe → escalate
-    probe_methods: tuple[str, ...] = ("ETS", "Intermittent", "ML-Exog RF")
+    probe_methods: tuple[str, ...] = ("CarryForward", "ETS", "Intermittent", "ML-Exog RF")
     escalate_methods_dense: tuple[str, ...] = ("ML-Exog XGB",)
     escalate_methods_seasonal: tuple[str, ...] = ("Prophet",)
     delta_better_than_baseline: float = _env_float("DELTA_BETTER_THAN_BASELINE", 0.02)

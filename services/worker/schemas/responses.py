@@ -72,6 +72,22 @@ class RecommendationRow(BaseModel):
     order_qty_rounded: float
 
 
+class PredictionRow(BaseModel):
+    """Per-month prediction of the winning combination.
+
+    `y` is the realized observation when `ds` falls inside the panel; for
+    future months past the panel's last observation it is None. The PI bands
+    come from the Laplace bootstrap and may be None for edge cases where
+    the bootstrap is skipped (e.g. intermittent with zero residuals)."""
+    ds: str                          # ISO date 'YYYY-MM-DD'
+    y: Optional[float] = None
+    yhat: float
+    pi80_lo: Optional[float] = None
+    pi80_hi: Optional[float] = None
+    pi95_lo: Optional[float] = None
+    pi95_hi: Optional[float] = None
+
+
 class ForecastResult(BaseModel):
     sku: str
     run_id: int
@@ -81,6 +97,7 @@ class ForecastResult(BaseModel):
     models: list[ModelRow] = Field(default_factory=list)
     exog_selection: list[ExogSelectionRow] = Field(default_factory=list)
     val_residuals: list[ValResidualRow] = Field(default_factory=list)
+    predictions: list[PredictionRow] = Field(default_factory=list)
     recommendation: RecommendationRow
 
 

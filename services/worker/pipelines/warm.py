@@ -31,6 +31,7 @@ from services.worker.schemas.responses import (
     ExogSelectionRow,
     ForecastResult,
     ModelRow,
+    PredictionRow,
     RecommendationRow,
     ValResidualRow,
     WinningCombo,
@@ -189,7 +190,20 @@ def run_warm(request: ForecastWarmRequest) -> ForecastResult:
         e_t_stockout_mo=full_row.e_t_stockout_mo,
     )
 
-    _, sims_best = per_combo_preds[(full_row.horizon, full_row.exog, full_row.y_variant, full_row.phase)]
+    preds_pi_best, sims_best = per_combo_preds[(full_row.horizon, full_row.exog, full_row.y_variant, full_row.phase)]
+    pred_join = preds_pi_best.merge(truth_full, on="ds", how="left")
+    predictions_out: list[PredictionRow] = []
+    for _, r in pred_join.iterrows():
+        y_val = r.get("y")
+        predictions_out.append(PredictionRow(
+            ds=pd.Timestamp(r["ds"]).strftime("%Y-%m-%d"),
+            y=(float(y_val) if pd.notna(y_val) else None),
+            yhat=float(r["yhat"]),
+            pi80_lo=(float(r["pi80_lo"]) if pd.notna(r.get("pi80_lo")) else None),
+            pi80_hi=(float(r["pi80_hi"]) if pd.notna(r.get("pi80_hi")) else None),
+            pi95_lo=(float(r["pi95_lo"]) if pd.notna(r.get("pi95_lo")) else None),
+            pi95_hi=(float(r["pi95_hi"]) if pd.notna(r.get("pi95_hi")) else None),
+        ))
     params = request.params_row
     cum_q = cum_demand_quantile(sims_best, int(params.h_cover), float(params.q_target))
     order_qty_raw = float(cum_q - start_stock)
@@ -217,5 +231,6 @@ def run_warm(request: ForecastWarmRequest) -> ForecastResult:
         sku=request.sku, run_id=request.run_id, mode="warm_with_refit",
         winning=winning, combinations=combinations, models=models_out,
         exog_selection=exog_selection_rows, val_residuals=val_residuals_rows,
+        predictions=predictions_out,
         recommendation=recommendation,
     )

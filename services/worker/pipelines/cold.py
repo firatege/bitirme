@@ -38,6 +38,7 @@ from services.worker.schemas.responses import (
     ExogSelectionRow,
     ForecastResult,
     ModelRow,
+    PredictionRow,
     RecommendationRow,
     ValResidualRow,
     WinningCombo,
@@ -364,7 +365,24 @@ def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None
     )
 
     # --- OMS recommendation using winning combo's sims ---
-    _, sims_best = per_combo_preds[(best.horizon, best.exog, best.y_variant, best.phase)]
+    preds_pi_best, sims_best = per_combo_preds[(best.horizon, best.exog, best.y_variant, best.phase)]
+    # Winning trajectory: per-month yhat + PI bands for the dashboard chart.
+    # Join against truth so y is filled where it exists (TEST window) and
+    # None for any future months past the panel's last observation.
+    truth_best = truth_full if best.horizon == "Full" else truth_short
+    pred_join = preds_pi_best.merge(truth_best, on="ds", how="left")
+    predictions_out: list[PredictionRow] = []
+    for _, r in pred_join.iterrows():
+        y_val = r.get("y")
+        predictions_out.append(PredictionRow(
+            ds=pd.Timestamp(r["ds"]).strftime("%Y-%m-%d"),
+            y=(float(y_val) if pd.notna(y_val) else None),
+            yhat=float(r["yhat"]),
+            pi80_lo=(float(r["pi80_lo"]) if pd.notna(r.get("pi80_lo")) else None),
+            pi80_hi=(float(r["pi80_hi"]) if pd.notna(r.get("pi80_hi")) else None),
+            pi95_lo=(float(r["pi95_lo"]) if pd.notna(r.get("pi95_lo")) else None),
+            pi95_hi=(float(r["pi95_hi"]) if pd.notna(r.get("pi95_hi")) else None),
+        ))
     params = request.params_row
     h_cover = int(params.h_cover)
     q_target = float(params.q_target)
@@ -387,5 +405,6 @@ def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None
         sku=request.sku, run_id=request.run_id, mode="cold",
         winning=winning, combinations=combinations, models=models_out,
         exog_selection=exog_selection_rows, val_residuals=val_residuals_rows,
+        predictions=predictions_out,
         recommendation=recommendation,
     )
