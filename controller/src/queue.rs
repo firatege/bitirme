@@ -10,13 +10,17 @@ use crate::orchestrator::Orchestrator;
 
 pub const MAX_ATTEMPTS: i32 = 2;
 
-/// Create a new forecast_runs row and enqueue one forecast_jobs row per distinct SKU
-/// in sales_panel. Returns (run_id, total_jobs).
+/// Create a new forecast_runs row and enqueue one forecast_jobs row per SKU.
+/// If `skus` is `None`, every distinct SKU in sales_panel is enqueued (full monthly run).
+/// If `skus` is `Some(list)`, only those that exist in sales_panel are enqueued — unknown
+/// SKUs are silently dropped via the INNER JOIN (a future revision can return a 4xx with
+/// the missing set if needed). Returns (run_id, total_jobs).
 pub async fn enqueue_monthly_run(
     pool: &PgPool,
     pipeline_version: &str,
     config_json: serde_json::Value,
     data_version_hash: &str,
+    skus: Option<&[String]>,
 ) -> Result<(i64, usize)> {
     let mut tx = pool.begin().await?;
     let row = sqlx::query(
@@ -34,19 +38,42 @@ pub async fn enqueue_monthly_run(
     .context("INSERT forecast_runs")?;
     let run_id: i64 = row.try_get("run_id")?;
 
-    let inserted = sqlx::query(
-        r#"
-        INSERT INTO forecast_jobs (run_id, sku, status)
-        SELECT $1, sku, 'queued'::job_status FROM (
-            SELECT DISTINCT sku FROM sales_panel ORDER BY sku
-        ) AS s
-        ON CONFLICT (run_id, sku) DO NOTHING
-        "#,
-    )
-    .bind(run_id)
-    .execute(&mut *tx)
-    .await
-    .context("INSERT forecast_jobs")?;
+    let inserted = match skus {
+        None => {
+            sqlx::query(
+                r#"
+                INSERT INTO forecast_jobs (run_id, sku, status)
+                SELECT $1, sku, 'queued'::job_status FROM (
+                    SELECT DISTINCT sku FROM sales_panel ORDER BY sku
+                ) AS s
+                ON CONFLICT (run_id, sku) DO NOTHING
+                "#,
+            )
+            .bind(run_id)
+            .execute(&mut *tx)
+            .await
+            .context("INSERT forecast_jobs")?
+        }
+        Some(filter) => {
+            // INNER JOIN against sales_panel so unknown SKUs are dropped (no silent
+            // "queued forever" rows).
+            sqlx::query(
+                r#"
+                INSERT INTO forecast_jobs (run_id, sku, status)
+                SELECT $1, p.sku, 'queued'::job_status
+                FROM (SELECT DISTINCT sku FROM sales_panel) AS p
+                JOIN unnest($2::text[]) AS req(sku) USING (sku)
+                ORDER BY p.sku
+                ON CONFLICT (run_id, sku) DO NOTHING
+                "#,
+            )
+            .bind(run_id)
+            .bind(filter)
+            .execute(&mut *tx)
+            .await
+            .context("INSERT forecast_jobs (filtered)")?
+        }
+    };
 
     tx.commit().await?;
     Ok((run_id, inserted.rows_affected() as usize))

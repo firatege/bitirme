@@ -94,6 +94,10 @@ struct CreateRunBody {
     concurrency: usize,
     #[serde(default = "default_true")]
     check_drift: bool,
+    /// Optional subset. When omitted/null, all distinct SKUs in sales_panel are queued.
+    /// When provided, only listed SKUs that exist in sales_panel are queued.
+    #[serde(default)]
+    skus: Option<Vec<String>>,
 }
 
 fn default_concurrency() -> usize { 8 }
@@ -123,12 +127,14 @@ async fn create_run(
         "concurrency": body.concurrency,
         "check_drift": body.check_drift,
         "trigger": "api",
+        "skus": body.skus,
     });
     let (run_id, n_jobs) = queue::enqueue_monthly_run(
         &state.pool,
         &state.pipeline_version,
         config,
         &data_version_hash,
+        body.skus.as_deref(),
     )
     .await
     .map_err(ApiError::from_anyhow)?;

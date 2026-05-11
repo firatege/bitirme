@@ -204,7 +204,7 @@ async fn main() -> Result<()> {
                 "check_drift": !no_drift_check,
             });
             let (run_id, n_jobs) = queue::enqueue_monthly_run(
-                &pool, &pipeline_version(), config, &data_version_hash,
+                &pool, &pipeline_version(), config, &data_version_hash, None,
             ).await?;
             info!(run_id, n_jobs, concurrency, "monthly-run enqueued; starting claim loop");
             queue::run_monthly(
