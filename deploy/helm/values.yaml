@@ -1,0 +1,82 @@
+# Defaults — every per-service file in values/ overrides what it needs.
+
+replicaCount: 1
+
+app:
+  # Release name is used as app/component name unless overridden here.
+  name: ""
+  port: 8080
+  image:
+    repository: ""
+    tag: ""
+    pullPolicy: IfNotPresent
+  pullSecrets:
+    - regcred
+  command: []
+  args: []
+  env: []          # list of {name, value} or {name, valueFrom: ...}
+  envFromSecrets: []
+  envFromConfigMaps: []
+
+# Liveness/readiness — each per-service values file owns its full probe spec.
+# Helm deep-merges nested keys, so having a default here would mix tcpSocket+exec
+# and the API server would reject the deployment.
+probes:
+  liveness: {}
+  readiness: {}
+
+resources: {}
+
+# Optional persistent volume claim. If `enabled`, mounts at `mountPath`.
+persistence:
+  enabled: false
+  size: 5Gi
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  mountPath: /data
+
+# Extra volumes / mounts (e.g. configMap-backed).
+volumes: []
+volumeMounts: []
+
+# Service exposes app.port internally as port 80.
+service:
+  enabled: true
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: nginx
+  host: bitirme.umceko.com
+  path: /
+  pathType: Prefix
+  annotations: {}
+  tls: true
+  tlsSecretName: ""   # defaults to "<host>-tls"
+  clusterIssuer: letsencrypt-prod
+
+autoscaling:
+  enabled: false
+  minReplicas: 1
+  maxReplicas: 3
+  targetCPUUtilizationPercentage: 80
+
+# Nightly auto-train job. Only the controller release enables this; the rest leave it off.
+cronjob:
+  enabled: false
+  schedule: "0 2 * * *"
+  timeZone: "Europe/Istanbul"
+  concurrencyPolicy: Forbid     # never overlap a running monthly-run
+  startingDeadlineSeconds: 600
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  backoffLimit: 1
+  activeDeadlineSeconds: 14400  # 4h hard cap (single SKU cold ≈ 15 min × 21 = ~5h)
+  command: []                   # overridden per service
+  args: []
+  resources: {}
+
+podAnnotations: {}
+podLabels: {}
+podSecurityContext: {}

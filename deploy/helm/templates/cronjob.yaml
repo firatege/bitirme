@@ -1,0 +1,63 @@
+{{- if .Values.cronjob.enabled -}}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "bitirme.fullname" . }}-cron
+  labels:
+    {{- include "bitirme.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  timeZone: {{ .Values.cronjob.timeZone | quote }}
+  concurrencyPolicy: {{ .Values.cronjob.concurrencyPolicy }}
+  successfulJobsHistoryLimit: {{ .Values.cronjob.successfulJobsHistoryLimit }}
+  failedJobsHistoryLimit: {{ .Values.cronjob.failedJobsHistoryLimit }}
+  startingDeadlineSeconds: {{ .Values.cronjob.startingDeadlineSeconds }}
+  jobTemplate:
+    spec:
+      backoffLimit: {{ .Values.cronjob.backoffLimit }}
+      activeDeadlineSeconds: {{ .Values.cronjob.activeDeadlineSeconds }}
+      template:
+        metadata:
+          labels:
+            {{- include "bitirme.selectorLabels" . | nindent 12 }}
+            job-type: cron
+        spec:
+          restartPolicy: OnFailure
+          {{- with .Values.app.pullSecrets }}
+          imagePullSecrets:
+            {{- range . }}
+            - name: {{ . }}
+            {{- end }}
+          {{- end }}
+          containers:
+            - name: {{ include "bitirme.name" . }}-cron
+              image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+              {{- with .Values.cronjob.command }}
+              command:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.cronjob.args }}
+              args:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- with .Values.app.env }}
+              env:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+              {{- if or .Values.app.envFromSecrets .Values.app.envFromConfigMaps }}
+              envFrom:
+                {{- range .Values.app.envFromSecrets }}
+                - secretRef:
+                    name: {{ . }}
+                {{- end }}
+                {{- range .Values.app.envFromConfigMaps }}
+                - configMapRef:
+                    name: {{ . }}
+                {{- end }}
+              {{- end }}
+              {{- with .Values.cronjob.resources }}
+              resources:
+                {{- toYaml . | nindent 16 }}
+              {{- end }}
+{{- end }}

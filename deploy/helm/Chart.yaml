@@ -1,0 +1,6 @@
+apiVersion: v2
+name: bitirme
+description: Generic single-service chart for the bitirme thesis project (api, controller, dashboard, postgres, grafana).
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

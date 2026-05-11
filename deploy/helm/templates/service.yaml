@@ -1,0 +1,17 @@
+{{- if and .Values.service.enabled .Values.app.port -}}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bitirme.fullname" . }}
+  labels:
+    {{- include "bitirme.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: app
+      protocol: TCP
+  selector:
+    {{- include "bitirme.selectorLabels" . | nindent 4 }}
+{{- end }}

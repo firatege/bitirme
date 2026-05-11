@@ -1,0 +1,33 @@
+# Python FastAPI worker (services.worker.main:app).
+app:
+  name: api
+  port: 8000
+  env:
+    - { name: PYTHONUNBUFFERED, value: "1" }
+    - { name: MODEL_DIR,        value: "/app/models" }
+    - { name: FAST_MODE,        value: "True" }
+    - { name: B_BOOT,           value: "150" }
+    - { name: DRIFT_EPS,        value: "0.20" }
+    - { name: USE_GPU_XGB,      value: "False" }
+
+probes:
+  liveness:
+    httpGet:    { path: /healthz, port: app }
+    initialDelaySeconds: 30
+    periodSeconds: 15
+  readiness:
+    httpGet:    { path: /healthz, port: app }
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+resources:
+  requests: { cpu: "500m", memory: "1Gi" }
+  limits:   { cpu: "4",    memory: "8Gi" }
+
+persistence:
+  enabled: true
+  size: 10Gi
+  mountPath: /app/models
+
+ingress:
+  enabled: false   # internal-only; controller talks to it via cluster DNS

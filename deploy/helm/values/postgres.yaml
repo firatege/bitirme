@@ -1,0 +1,43 @@
+# Single-replica Postgres for the bitirme namespace. State lives on the PVC.
+# The bitirme-postgres secret is created by `just bootstrap` and consumed here.
+app:
+  name: postgres
+  image:
+    repository: postgres
+    tag: "16-alpine"
+  port: 5432
+  env:
+    - { name: PGDATA, value: "/var/lib/postgresql/data/pgdata" }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: username } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: password } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: database } }
+
+probes:
+  liveness:
+    exec:
+      command: ["pg_isready", "-U", "bitirme"]
+    initialDelaySeconds: 20
+    periodSeconds: 15
+  readiness:
+    exec:
+      command: ["pg_isready", "-U", "bitirme"]
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+resources:
+  requests: { cpu: "100m", memory: "256Mi" }
+  limits:   { cpu: "2",    memory: "2Gi" }
+
+persistence:
+  enabled: true
+  size: 20Gi
+  mountPath: /var/lib/postgresql/data
+
+service:
+  port: 5432
+
+ingress:
+  enabled: false

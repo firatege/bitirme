@@ -1,0 +1,66 @@
+# Grafana served at /grafana sub-path. ConfigMaps are created by `just bootstrap`
+# from deploy/grafana/ — re-run bootstrap after editing dashboards/datasources.
+app:
+  name: grafana
+  image:
+    repository: grafana/grafana
+    tag: "latest"
+  port: 3000
+  env:
+    - { name: GF_SECURITY_ADMIN_USER,        value: "admin" }
+    - { name: GF_SECURITY_ADMIN_PASSWORD,    value: "admin" }
+    - { name: GF_AUTH_ANONYMOUS_ENABLED,     value: "true" }
+    - { name: GF_AUTH_ANONYMOUS_ORG_ROLE,    value: "Viewer" }
+    - { name: GF_SECURITY_ALLOW_EMBEDDING,   value: "true" }
+    - { name: GF_SERVER_ROOT_URL,            value: "https://bitirme.umceko.com/grafana" }
+    - { name: GF_SERVER_SERVE_FROM_SUB_PATH, value: "true" }
+    - name: POSTGRES_USER
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: username } }
+    - name: POSTGRES_PASSWORD
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: password } }
+    - name: POSTGRES_DB
+      valueFrom: { secretKeyRef: { name: bitirme-postgres, key: database } }
+
+probes:
+  liveness:
+    httpGet:    { path: /api/health, port: app }
+    initialDelaySeconds: 30
+    periodSeconds: 15
+  readiness:
+    httpGet:    { path: /api/health, port: app }
+    initialDelaySeconds: 10
+    periodSeconds: 10
+
+resources:
+  requests: { cpu: "100m", memory: "128Mi" }
+  limits:   { cpu: "1",    memory: "512Mi" }
+
+# Grafana container runs as UID 472. fsGroup makes the mounted PVC group-writable
+# by that GID so /var/lib/grafana is usable.
+podSecurityContext:
+  fsGroup: 472
+  runAsUser: 472
+  runAsGroup: 472
+
+persistence:
+  enabled: true
+  size: 5Gi
+  mountPath: /var/lib/grafana
+
+volumes:
+  - name: provisioning-datasources
+    configMap: { name: bitirme-grafana-datasources }
+  - name: provisioning-dashboards
+    configMap: { name: bitirme-grafana-dashboards-config }
+  - name: dashboards
+    configMap: { name: bitirme-grafana-dashboards }
+
+volumeMounts:
+  - { name: provisioning-datasources, mountPath: /etc/grafana/provisioning/datasources }
+  - { name: provisioning-dashboards,  mountPath: /etc/grafana/provisioning/dashboards }
+  - { name: dashboards,               mountPath: /var/lib/grafana/dashboards }
+
+ingress:
+  enabled: true
+  path: /grafana
+  pathType: Prefix

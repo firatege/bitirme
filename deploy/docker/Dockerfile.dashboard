@@ -1,0 +1,25 @@
+# React + Vite SPA → nginx static serve.
+# Build args set the public URLs that get baked into the bundle.
+ARG NODE_VERSION=20-alpine
+ARG NGINX_VERSION=1.27-alpine
+
+FROM node:${NODE_VERSION} AS builder
+WORKDIR /app
+
+ARG VITE_API_BASE_URL
+ARG VITE_GRAFANA_URL
+ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
+ENV VITE_GRAFANA_URL=${VITE_GRAFANA_URL}
+ENV VITE_USE_STATIC_SOURCE=false
+ENV VITE_USE_MSW=false
+
+COPY dashboard/package.json dashboard/package-lock.json ./
+RUN npm ci --no-audit --no-fund
+
+COPY dashboard/ ./
+RUN npm run build
+
+FROM nginx:${NGINX_VERSION} AS runtime
+COPY deploy/docker/nginx.dashboard.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist /usr/share/nginx/html
+EXPOSE 80

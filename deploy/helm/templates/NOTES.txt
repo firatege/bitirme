@@ -1,0 +1,11 @@
+Released {{ .Release.Name }} → {{ .Release.Namespace }}.
+
+Image:    {{ .Values.app.image.repository }}:{{ .Values.app.image.tag | default .Chart.AppVersion }}
+Replicas: {{ .Values.replicaCount }}
+{{- if .Values.ingress.enabled }}
+URL:      https://{{ .Values.ingress.host }}{{ .Values.ingress.path }}
+{{- end }}
+
+Useful:
+  kubectl -n {{ .Release.Namespace }} get pods -l app={{ include "bitirme.name" . }}
+  kubectl -n {{ .Release.Namespace }} logs -f -l app={{ include "bitirme.name" . }}

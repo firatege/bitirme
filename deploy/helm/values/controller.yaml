@@ -1,0 +1,56 @@
+# Rust controller — REST API at /api on the public ingress.
+app:
+  name: controller
+  port: 9000
+  args: ["serve"]
+  env:
+    - { name: API_URL,            value: "http://api:80" }
+    - { name: MODEL_DIR,          value: "/app/models" }
+    - { name: MAX_PARALLEL_JOBS,  value: "8" }
+    - { name: RUST_LOG,           value: "info,sqlx=warn" }
+    - { name: CONTROLLER_BIND,    value: "0.0.0.0:9000" }
+    # Postgres — DATABASE_URL assembled from the bitirme-postgres secret.
+    - name: PG_USER
+      valueFrom:
+        secretKeyRef: { name: bitirme-postgres, key: username }
+    - name: PG_PASS
+      valueFrom:
+        secretKeyRef: { name: bitirme-postgres, key: password }
+    - { name: DATABASE_URL, value: "postgres://$(PG_USER):$(PG_PASS)@postgres:5432/bitirme" }
+
+probes:
+  liveness:
+    httpGet:    { path: /healthz, port: app }
+    initialDelaySeconds: 15
+    periodSeconds: 15
+  readiness:
+    httpGet:    { path: /healthz, port: app }
+    initialDelaySeconds: 5
+    periodSeconds: 10
+
+resources:
+  requests: { cpu: "200m", memory: "256Mi" }
+  limits:   { cpu: "2",    memory: "2Gi" }
+
+ingress:
+  enabled: true
+  path: /api(/|$)(.*)
+  pathType: ImplementationSpecific
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "1800"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "1800"
+
+# Nightly auto-train. Runs the controller's monthly-run subcommand which:
+#   1. INSERTs forecast_runs + per-SKU forecast_jobs rows
+#   2. Spins up N workers that claim jobs and dispatch /forecast/{cold,warm} to the api
+#   3. Persists results into forecasts + forecast_runs tables
+# Skips already-running runs via the Forbid concurrencyPolicy at the CronJob level.
+cronjob:
+  enabled: true
+  schedule: "0 2 * * *"
+  args: ["monthly-run", "--concurrency", "4"]
+  resources:
+    requests: { cpu: "100m", memory: "128Mi" }
+    limits:   { cpu: "1",    memory: "1Gi" }
