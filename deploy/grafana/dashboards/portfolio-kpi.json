@@ -4,7 +4,7 @@
   "tags": ["bitirme", "kpi"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 6,
+  "version": 7,
   "refresh": "1m",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
@@ -68,17 +68,30 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Ortalama MAE",
-      "description": "Son run'daki tüm SKU'ların 'kazanan model' MAE'sinin aritmetik ortalaması. SKU'ların talep ölçeği farklı olduğu için tek başına yorumlanmamalı; SKU başına MAE için Model Performans dashboard'una bakın.",
+      "title": "Median MAPE (son run)",
+      "description": "Son run'da kazanan kombinasyonların MAPE medyanı — ölçek-bağımsız portföy doğruluk skoru. ≤%15 iyi, ≤%30 kabul, >%30 incele. SKU başına dağılım için Model Performans dashboard'una bakın.",
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id=(SELECT run_id FROM r)",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c.mape / 100.0) AS median_mape FROM sku_runs sr JOIN sku_run_combinations c ON c.run_id = sr.run_id AND c.sku = sr.sku AND c.horizon = sr.winning_horizon AND c.exog = sr.winning_exog AND c.y_variant = sr.winning_y_variant AND c.phase = sr.winning_phase WHERE sr.run_id = (SELECT run_id FROM r) AND c.mape IS NOT NULL",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 0.15 },
+              { "color": "red",    "value": 0.30 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 5,
@@ -140,9 +153,9 @@
     },
     {
       "id": 7,
-      "type": "timeseries",
-      "title": "Toplam önerilen sipariş — zaman içinde",
-      "description": "Run'lar arasında toplam sipariş önerisinin değişimi. Anlamlı trend için en az 2-3 başarılı run gerekir; tek run varsa tek nokta gözükür.",
+      "type": "barchart",
+      "title": "Toplam önerilen sipariş — run bazında",
+      "description": "Her bar = bir tamamlanmış run; yüksek bar o ay portföyün daha çok stok ihtiyacı olduğu anlamına gelir. Anlamlı trend için en az 2-3 başarılı run gerekir.",
       "gridPos": { "h": 9, "w": 24, "x": 0, "y": 14 },
       "targets": [
         {
@@ -151,7 +164,15 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short" } }
+      "options": {
+        "orientation": "vertical",
+        "showValue": "auto",
+        "barWidth": 0.9,
+        "groupWidth": 0.7,
+        "legend": { "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": { "defaults": { "unit": "short", "color": { "mode": "fixed", "fixedColor": "purple" } } }
     },
     {
       "id": 8,

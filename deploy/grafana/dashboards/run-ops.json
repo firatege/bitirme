@@ -4,15 +4,15 @@
   "tags": ["bitirme", "ops"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 3,
+  "version": 4,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "panels": [
     {
       "id": 1,
-      "type": "timeseries",
+      "type": "barchart",
       "title": "Run süresi (dakika)",
-      "description": "Her tamamlanmış run'ın baştan sona süresi. Süre = completed_at − started_at, dakika cinsinden. Pipeline'ın yavaşladığını veya FAST_MODE değişikliklerinin etkisini izlemek için kullanılır. Tek run varsa tek nokta gözükür.",
+      "description": "Her tamamlanmış run'ın baştan sona süresi (completed_at − started_at, dakika). Her bar = bir run. Pipeline yavaşlamasını veya FAST_MODE etkisini takip etmek için kullanılır. Run'lar seyrek olduğundan bar chart, zaman serisi yerine her run'ı ayrık bir sütun olarak gösterir.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 0 },
       "targets": [
         {
@@ -21,7 +21,15 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "m", "decimals": 1 } }
+      "options": {
+        "orientation": "vertical",
+        "showValue": "auto",
+        "barWidth": 0.9,
+        "groupWidth": 0.7,
+        "legend": { "showLegend": false },
+        "tooltip": { "mode": "single", "sort": "none" }
+      },
+      "fieldConfig": { "defaults": { "unit": "m", "decimals": 1, "color": { "mode": "fixed", "fixedColor": "blue" } } }
     },
     {
       "id": 2,
@@ -109,18 +117,36 @@
     },
     {
       "id": 6,
-      "type": "timeseries",
+      "type": "barchart",
       "title": "Run başına SKU sayısı (cold vs warm)",
-      "description": "cold = SKU ilk kez tahmin ediliyor (model train + tüm grid search); warm = drift detekte edilmedi, önceki spec yeniden kullanıldı (cache hit). Sağlıklı operasyonda warm oranı zamanla artar.",
+      "description": "Her forecast run'ında kaç SKU cold (sıfırdan grid search + train) kaç SKU warm (cached spec ile devam, drift yok) çalıştı. warm = warm + warm_with_refit birleştirilmiştir. Sağlıklı operasyonda warm oranı zamanla baskın olmalı; ani cold sıçraması drift veya yeni SKU göstergesidir.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 20 },
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "SELECT fr.started_at AS time, sr.mode::text AS metric, COUNT(*) AS value FROM sku_runs sr JOIN forecast_runs fr USING(run_id) WHERE $__timeFilter(fr.started_at) GROUP BY fr.started_at, sr.mode ORDER BY fr.started_at",
+          "rawSql": "SELECT fr.started_at AS time, CASE WHEN sr.mode::text = 'cold' THEN 'cold' ELSE 'warm' END AS metric, COUNT(*) AS value FROM sku_runs sr JOIN forecast_runs fr USING(run_id) WHERE $__timeFilter(fr.started_at) GROUP BY fr.started_at, CASE WHEN sr.mode::text = 'cold' THEN 'cold' ELSE 'warm' END ORDER BY fr.started_at",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short" } }
+      "options": {
+        "orientation": "vertical",
+        "stacking": "normal",
+        "groupWidth": 0.7,
+        "barWidth": 0.9,
+        "showValue": "auto",
+        "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" },
+        "tooltip": { "mode": "multi", "sort": "none" }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "fixed" }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "cold" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "warm" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } } ] }
+        ]
+      }
     }
   ]
 }

@@ -4,7 +4,7 @@
   "tags": ["bitirme", "model"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "refresh": "30s",
   "time": { "from": "now-6h", "to": "now" },
   "templating": {
@@ -31,32 +31,48 @@
     {
       "id": 1,
       "type": "timeseries",
-      "title": "MAE (winning model) — run bazında",
-      "description": "Her SKU için her run'da kazanan modelin MAE değerinin zaman serisi. Sağ üstteki SKU dropdown'undan filtreleyebilirsiniz. Tek run yapıldıysa SKU başına tek nokta görünür — anlamlı trend için 3-5 run gerekir.",
+      "title": "Portföy MAPE — run bazında (median, p10, p90)",
+      "description": "SKU'ların talep ölçekleri çok farklı olduğu için MAE'yi kıyaslamak yanıltıcı. Bunun yerine her run'da kazanan kombinasyonun MAPE değerleri üzerinden portföy dağılımı gösterilir: median = portföyün tipik hatası; p10/p90 = en iyi/en kötü uçların bandı. Yukarı doğru trend = model kötüleşiyor. SKU dropdown'undan alt küme filtrelenebilir.",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 0 },
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "SELECT fr.completed_at AS time, sr.sku AS metric, sr.winning_mae AS value FROM sku_runs sr JOIN forecast_runs fr USING (run_id) WHERE sr.sku ~ '${sku:regex}' AND sr.winning_mae IS NOT NULL AND $__timeFilter(fr.completed_at) ORDER BY fr.completed_at",
+          "rawSql": "SELECT fr.completed_at AS time, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c.mape / 100.0) AS \"median\", PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY c.mape / 100.0) AS \"p10\", PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY c.mape / 100.0) AS \"p90\" FROM sku_runs sr JOIN forecast_runs fr USING (run_id) JOIN sku_run_combinations c ON c.run_id = sr.run_id AND c.sku = sr.sku AND c.horizon = sr.winning_horizon AND c.exog = sr.winning_exog AND c.y_variant = sr.winning_y_variant AND c.phase = sr.winning_phase WHERE sr.sku ~ '${sku:regex}' AND c.mape IS NOT NULL AND $__timeFilter(fr.completed_at) GROUP BY fr.completed_at ORDER BY fr.completed_at",
           "refId": "A"
         }
       ],
       "fieldConfig": {
-        "defaults": { "unit": "short" },
-        "overrides": []
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 0,
+            "showPoints": "always",
+            "pointSize": 6,
+            "spanNulls": false
+          }
+        },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "median" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }, { "id": "custom.lineWidth", "value": 3 }] },
+          { "matcher": { "id": "byName", "options": "p10" },    "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }] },
+          { "matcher": { "id": "byName", "options": "p90" },    "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } },   { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }] }
+        ]
       },
-      "options": { "legend": { "showLegend": true, "placement": "right" } }
+      "options": { "legend": { "showLegend": true, "placement": "right", "displayMode": "list" }, "tooltip": { "mode": "multi", "sort": "none" } }
     },
     {
       "id": 2,
       "type": "barchart",
-      "title": "Son run — SKU başına MAE (büyükten küçüğe)",
-      "description": "Son run'daki SKU'ların kazanan model MAE değerleri. SKU'ların talep ölçeği farklı olduğu için doğrudan karşılaştırma yapılırken bu farklılık göz önünde bulundurulmalı.",
+      "title": "Son run — SKU başına MAPE (büyükten küçüğe)",
+      "description": "Son run'daki SKU'ların kazanan kombinasyonu için MAPE (ortalama mutlak yüzde hata). MAE yerine MAPE kullanılıyor; çünkü MAPE talep ölçeğinden bağımsız → SKU'lar gerçekten kıyaslanabilir. Üstteki çubuklar = en kötü tahmin edilen SKU'lar. Renkler: ≤%15 yeşil (iyi), ≤%30 sarı, >%30 kırmızı (incele).",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sku, winning_mae FROM sku_runs WHERE run_id = (SELECT run_id FROM last_run) AND winning_mae IS NOT NULL ORDER BY winning_mae DESC NULLS LAST LIMIT 25",
+          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sr.sku, c.mape / 100.0 AS mape FROM sku_runs sr JOIN sku_run_combinations c ON c.run_id = sr.run_id AND c.sku = sr.sku AND c.horizon = sr.winning_horizon AND c.exog = sr.winning_exog AND c.y_variant = sr.winning_y_variant AND c.phase = sr.winning_phase WHERE sr.run_id = (SELECT run_id FROM last_run) AND c.mape IS NOT NULL ORDER BY c.mape DESC NULLS LAST LIMIT 25",
           "refId": "A"
         }
       ],
@@ -67,22 +83,49 @@
         "xField": "sku",
         "legend": { "showLegend": false }
       },
-      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 0.15 },
+              { "color": "red",    "value": 0.30 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 3,
       "type": "stat",
-      "title": "Ortalama MAE (son run)",
-      "description": "Son run'daki tüm SKU'ların kazanan model MAE'sinin aritmetik ortalaması. NOT: SKU ölçekleri farklı olduğu için bu sayı 'genel doğruluk' anlamına gelmez — düşüş/yükseliş trendi takip etmek için run'lar arası kıyas anlamlıdır.",
+      "title": "Median MAPE (son run)",
+      "description": "Son run'da kazanan kombinasyonların MAPE medyanı. Ölçek-bağımsız tek bir 'portföy doğruluk skoru'. Mean değil median seçildi; tek bir aykırı SKU'nun değeri çarpıtmaması için. Eşik: ≤%15 iyi, ≤%30 kabul edilebilir, >%30 incele.",
       "gridPos": { "h": 5, "w": 12, "x": 12, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT AVG(winning_mae) AS avg_mae FROM sku_runs WHERE run_id IN (SELECT run_id FROM r)",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c.mape / 100.0) AS median_mape FROM sku_runs sr JOIN sku_run_combinations c ON c.run_id = sr.run_id AND c.sku = sr.sku AND c.horizon = sr.winning_horizon AND c.exog = sr.winning_exog AND c.y_variant = sr.winning_y_variant AND c.phase = sr.winning_phase WHERE sr.run_id IN (SELECT run_id FROM r) AND c.mape IS NOT NULL",
           "refId": "A"
         }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "decimals": 2 } }
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green",  "value": 0 },
+              { "color": "yellow", "value": 0.15 },
+              { "color": "red",    "value": 0.30 }
+            ]
+          }
+        }
+      }
     },
     {
       "id": 4,

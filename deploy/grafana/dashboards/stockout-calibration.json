@@ -4,7 +4,7 @@
   "tags": ["bitirme", "calibration"],
   "timezone": "browser",
   "schemaVersion": 39,
-  "version": 5,
+  "version": 6,
   "refresh": "1m",
   "time": { "from": "now-180d", "to": "now" },
   "panels": [
@@ -21,7 +21,7 @@
           "refId": "A"
         }
       ],
-      "options": { "bucketSize": 0.05, "bucketOffset": 0 },
+      "options": { "bucketSize": 0.1, "bucketOffset": 0, "combine": false },
       "fieldConfig": { "defaults": { "unit": "percentunit" } }
     },
     {
@@ -37,7 +37,7 @@
           "refId": "A"
         }
       ],
-      "options": { "bucketSize": 0.05, "bucketOffset": 0 },
+      "options": { "bucketSize": 0.1, "bucketOffset": 0, "combine": false },
       "fieldConfig": { "defaults": { "unit": "percentunit" } }
     },
     {
