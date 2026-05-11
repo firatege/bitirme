@@ -6,7 +6,13 @@ import type { WinningCombo } from '@/entities/sku/schema';
 const NEUTRAL_BADGE =
   'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-surface-2 dark:text-stone-200 dark:ring-surface-line';
 
+// Y ensemble: ağırlıklar yalnız buralarda anlamlı. Saf RF/XGB/intermittent için
+// w_rf ve w_xgb tasarımdan boş gelir — gereksiz "—" satırı göstermeyelim.
+const ENSEMBLE_Y_VARIANTS = new Set(['Y-ENS', 'ENSEMBLE', 'ENS']);
+
 export function ModelProvenancePanel({ win }: { win: WinningCombo }) {
+  const isEnsemble = ENSEMBLE_Y_VARIANTS.has(win.y_variant.toUpperCase());
+
   return (
     <Card>
       <CardHeader
@@ -24,9 +30,19 @@ export function ModelProvenancePanel({ win }: { win: WinningCombo }) {
           <Row label="MAE">{fmtDec(win.mae)}</Row>
           <Row label="RMSE">{fmtDec(win.rmse)}</Row>
           <Row label="MAPE">{fmtPct(win.mape)}</Row>
-          <Row label="w_RF">{fmtDec(win.w_rf)}</Row>
-          <Row label="w_XGB">{fmtDec(win.w_xgb)}</Row>
+          {isEnsemble && (
+            <>
+              <Row label="w_RF">{fmtDec(win.w_rf)}</Row>
+              <Row label="w_XGB">{fmtDec(win.w_xgb)}</Row>
+            </>
+          )}
         </dl>
+        {!isEnsemble && (
+          <p className="mt-3 text-[11px] leading-snug text-slate-500 dark:text-stone-400">
+            Tek-model kazandı ({win.y_variant}); RF/XGB ağırlıkları yalnızca
+            ensemble (Y-ENS) için anlamlıdır.
+          </p>
+        )}
       </CardBody>
     </Card>
   );

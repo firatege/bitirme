@@ -98,10 +98,7 @@ export function AbcMatrix() {
 
   return (
     <Card>
-      <CardHeader
-        title="Aciliyet × Hacim Matrisi"
-        subtitle="Her nokta bir SKU. Sağa gidildikçe stockout riski artar, yukarı çıkıldıkça sipariş hacmi büyür. Sağ üst köşedeki SKU'lar öncelikli."
-      />
+      <CardHeader title="Aciliyet × Hacim Matrisi" />
       <CardBody>
         {/* Renk açıklaması — eşikler */}
         <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-600 dark:text-stone-300">
@@ -230,33 +227,6 @@ export function AbcMatrix() {
           </ResponsiveContainer>
         </div>
 
-        {/* 4 bölge açıklaması */}
-        <div className="mt-4 grid grid-cols-1 gap-2 text-[11px] sm:grid-cols-2">
-          <QuadrantNote
-            tone="critical"
-            title="Sağ üst — Öncelikli"
-            text="Yüksek risk + yüksek hacim. Önce bunları sipariş et."
-          />
-          <QuadrantNote
-            tone="warning"
-            title="Sağ alt — Riskli ama küçük"
-            text="Stockout riski var, hacim küçük; sipariş kolay ama gözden kaçırma."
-          />
-          <QuadrantNote
-            tone="info"
-            title="Sol üst — Sağlıklı çekirdek"
-            text="Yüksek hacim, risk düşük. Stok seviyesini koru, agresif sipariş gerekmez."
-          />
-          <QuadrantNote
-            tone="muted"
-            title="Sol alt — Önemsiz"
-            text="Düşük risk + düşük hacim. Rutin döngüde takip edilebilir."
-          />
-        </div>
-
-        <p className="mt-3 text-[11px] text-slate-500 dark:text-stone-400">
-          Bir SKU'ya tıklayarak detay sayfasına gidebilirsin.
-        </p>
       </CardBody>
     </Card>
   );
@@ -275,29 +245,3 @@ function LegendDot({ color, label }: { color: string; label: string }) {
   );
 }
 
-function QuadrantNote({
-  tone,
-  title,
-  text,
-}: {
-  tone: 'critical' | 'warning' | 'info' | 'muted';
-  title: string;
-  text: string;
-}) {
-  const toneClasses: Record<typeof tone, string> = {
-    critical:
-      'border-rose-200 bg-rose-50 dark:border-rose-900/40 dark:bg-rose-950/30',
-    warning:
-      'border-amber-200 bg-amber-50 dark:border-amber-900/40 dark:bg-amber-950/30',
-    info:
-      'border-teal-200 bg-teal-50 dark:border-teal-900/40 dark:bg-teal-950/30',
-    muted:
-      'border-slate-200 bg-slate-50 dark:border-surface-line dark:bg-surface-2/40',
-  };
-  return (
-    <div className={`rounded-md border px-2.5 py-1.5 ${toneClasses[tone]}`}>
-      <div className="font-medium text-slate-700 dark:text-stone-200">{title}</div>
-      <div className="mt-0.5 text-slate-600 dark:text-stone-400">{text}</div>
-    </div>
-  );
-}
