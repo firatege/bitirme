@@ -102,6 +102,8 @@ def recursive_predict_for_val(
         "mae_ens": mae_ens,
         "rmse_ens": rmse_ens,
         "mape_ens": mape_ens,
+        "val_y_mean": float(np.mean(join["y"].values)),
+        "val_yhat_ens_mean": float(np.mean(yhat_ens)),
         "residuals": {
             "RF": (join["y"].values - join["yhat_rf"].values),
             "XGB": (join["y"].values - join["yhat_xgb"].values),

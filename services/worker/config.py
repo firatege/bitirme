@@ -79,6 +79,14 @@ class WorkerConfig:
     intermittent_selector: str = _env("INTERMITTENT_SELECTOR", "auto")  # auto | all | none
     dense_override_last_n: int = _env_int("DENSE_OVERRIDE_LAST_N", 6)
     tsb_near_zero_eps: float = _env_float("TSB_NEAR_ZERO_EPS", 1e-6)
+    # Zero-ratio threshold above which TSB is forced as winner (bypasses MAE competition).
+    # Motivation: RF/XGB are biased high on >50% zero series; TSB's level estimate is safer.
+    intermittent_force_zero_ratio: float = _env_float("INTERMITTENT_FORCE_ZERO_RATIO", 0.50)
+
+    # Bias correction: scale predictions by val-period mean(y)/mean(yhat).
+    bias_correction_enabled: bool = _env_bool("BIAS_CORRECTION", True)
+    # Max multiplicative factor (factor clipped to [1/clip, clip]).
+    bias_correction_clip: float = _env_float("BIAS_CORRECTION_CLIP", 3.0)
 
     # Probe → escalate
     probe_methods: tuple[str, ...] = ("CarryForward", "ETS", "Intermittent", "ML-Exog RF")

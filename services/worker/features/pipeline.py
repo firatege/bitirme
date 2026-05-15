@@ -39,11 +39,17 @@ def prep_features_y(df_in: pd.DataFrame, causal: bool = False) -> pd.DataFrame:
 
 
 def mae_rmse_mape(y_true, y_pred):
+    """Returns (MAE, RMSE, wMAPE).
+
+    wMAPE = sum(|e|) / sum(y) * 100, computed over non-zero actual periods.
+    Avoids the division-by-zero explosion of classic MAPE on intermittent demand.
+    Field is still named 'mape' in schemas for API compatibility.
+    """
     y_true = np.asarray(y_true, dtype=float)
     y_pred = np.asarray(y_pred, dtype=float)
     from sklearn.metrics import mean_absolute_error
     mae = float(mean_absolute_error(y_true, y_pred))
     rmse = float(np.sqrt(np.mean((y_pred - y_true) ** 2)))
-    denom = np.where(y_true == 0, 1, y_true)
-    mape = float(np.mean(np.abs((y_true - y_pred) / denom)) * 100)
-    return mae, rmse, mape
+    total_actual = float(np.sum(np.abs(y_true)))
+    wmape = float(np.sum(np.abs(y_true - y_pred)) / total_actual * 100) if total_actual > 1e-9 else float("nan")
+    return mae, rmse, wmape

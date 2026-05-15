@@ -34,7 +34,7 @@ export const resources = {
       labels: {
         sku: 'SKU',
         mae: 'MAE',
-        mape: 'MAPE',
+        mape: 'wMAPE',
         stockout_p3m: '3ay stockout',
         stockout_p6m: '6ay stockout',
         order_qty: 'Önerilen Sipariş',
@@ -80,10 +80,10 @@ export const resources = {
         },
         baseline: {
           title: 'Modelin değeri — baseline karşılaştırması',
-          subtitle: 'Test penceresinde pipeline MAPE\'si vs basit referans modelleri',
+          subtitle: 'Test penceresinde pipeline wMAPE\'si vs basit referans modelleri. MASE de gösterilir (< 1 = naive\'den iyi).',
           headline_better: 'Pipeline naive baseline\'ı **{{pct}}** geçiyor — modelin değer kattığını gösterir.',
           headline_worse: 'Pipeline naive\'in **{{pct}}** altında — modelin getirisi sınırlı, basit kural yetiyor olabilir.',
-          headline_unknown: 'Pipeline MAPE hesaplandı; baseline karşılaştırması için yeterli geçmiş veri yok.',
+          headline_unknown: 'Pipeline wMAPE hesaplandı; baseline karşılaştırması için yeterli geçmiş veri yok.',
           pipeline: 'Pipeline (kazanan)',
           naive: 'Naive (son 3 ay ort.)',
           seasonal: 'Sezonsal naive (geçen yıl aynı ay)',

@@ -356,6 +356,20 @@ def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None
             combined_full = [c for c in combined_full if c.phase == "PRE"]
 
     best = min(combined_full, key=lambda c: c.mae)
+
+    # --- TSB override: if series has >= force_zero_ratio zeros, force the best
+    # Intermittent combo regardless of MAE competition. RF/XGB overfit to non-zero
+    # periods and produce persistent upward bias on highly sparse series.
+    zero_ratio = float((pd.to_numeric(d["y"], errors="coerce").fillna(0.0) == 0).mean())
+    if zero_ratio >= cfg.intermittent_force_zero_ratio:
+        # Search all Full-horizon combos (including PRE-only intermittent)
+        im_candidates = [
+            c for c in combinations
+            if c.horizon == "Full" and c.exog == "Intermittent"
+        ]
+        if im_candidates:
+            best = min(im_candidates, key=lambda c: c.mae)
+
     winning = WinningCombo(
         horizon=best.horizon, exog=best.exog, y_variant=best.y_variant,
         phase=best.phase, mae=best.mae, rmse=best.rmse, mape=best.mape,
@@ -366,6 +380,26 @@ def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None
 
     # --- OMS recommendation using winning combo's sims ---
     preds_pi_best, sims_best = per_combo_preds[(best.horizon, best.exog, best.y_variant, best.phase)]
+
+    # --- Bias correction: scale predictions by val mean(y) / mean(yhat).
+    # Only for non-intermittent winners where val_rep has the info. Skipped for
+    # TSB/Intermittent since TSB level is already a demand estimator.
+    if cfg.bias_correction_enabled and best.exog in val_rep:
+        vr = val_rep[best.exog]
+        y_mean = vr.get("val_y_mean", 0.0)
+        yhat_mean = vr.get("val_yhat_ens_mean", 0.0)
+        if yhat_mean > 1e-9 and y_mean > 0:
+            factor = float(np.clip(
+                y_mean / yhat_mean,
+                1.0 / cfg.bias_correction_clip,
+                cfg.bias_correction_clip,
+            ))
+            preds_pi_best = preds_pi_best.copy()
+            preds_pi_best["yhat"] = np.maximum(0.0, preds_pi_best["yhat"] * factor)
+            for col in ("pi80_lo", "pi80_hi", "pi95_lo", "pi95_hi"):
+                if col in preds_pi_best.columns:
+                    preds_pi_best[col] = np.maximum(0.0, preds_pi_best[col] * factor)
+            sims_best = sims_best * factor
     # Winning trajectory: per-month yhat + PI bands for the dashboard chart.
     # Join against truth so y is filled where it exists (TEST window) and
     # None for any future months past the panel's last observation.

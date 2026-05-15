@@ -12,26 +12,45 @@ interface Props {
   predictions: SkuPredictionPoint[] | undefined;
 }
 
-// MAPE excluding months where the truth is zero (or below epsilon). MAPE is
-// undefined when y=0, and silently penalising that math would inflate every
-// baseline equally. The worker side does the same skip.
-function mape(actuals: number[], preds: number[]): number | null {
-  const samples: number[] = [];
+// wMAPE = sum(|e|) / sum(y) — weighted by actual volume so zero months
+// don't create division-by-zero explosions (classic MAPE on intermittent
+// demand can exceed 1000% even when the model is reasonable).
+function wmape(actuals: number[], preds: number[]): number | null {
+  let sumError = 0;
+  let sumActual = 0;
   for (let i = 0; i < actuals.length; i++) {
     const y = actuals[i];
     const yhat = preds[i];
     if (y == null || yhat == null) continue;
-    if (Math.abs(y) < 1e-9) continue;
-    samples.push(Math.abs((y - yhat) / y));
+    sumError += Math.abs(y - yhat);
+    sumActual += Math.abs(y);
   }
-  if (samples.length === 0) return null;
-  return samples.reduce((s, v) => s + v, 0) / samples.length;
+  if (sumActual < 1e-9) return null;
+  return sumError / sumActual;
+}
+
+// MASE = MAE_model / MAE_naive — scale-free, <1 means better than naive.
+function mase(
+  actuals: number[],
+  preds: number[],
+  naivePreds: number[],
+): number | null {
+  if (actuals.length === 0) return null;
+  const modelMae =
+    actuals.reduce((s, y, i) => s + Math.abs(y - (preds[i] ?? 0)), 0) /
+    actuals.length;
+  const naiveMae =
+    actuals.reduce((s, y, i) => s + Math.abs(y - (naivePreds[i] ?? 0)), 0) /
+    actuals.length;
+  if (naiveMae < 1e-9) return null;
+  return modelMae / naiveMae;
 }
 
 interface Comparison {
-  pipelineMape: number | null;
-  naiveMape: number | null;
-  seasonalMape: number | null;
+  pipelineWmape: number | null;
+  naiveWmape: number | null;
+  seasonalWmape: number | null;
+  maseVsNaive: number | null;
   // Positive = pipeline is better; negative = pipeline is worse.
   improvementVsNaive: number | null;
   improvementVsSeasonal: number | null;
@@ -89,27 +108,29 @@ function buildComparison(
 
   if (actuals.length === 0) return null;
 
-  const pipelineMape = mape(actuals, pipelinePreds);
-  const naiveMape = mape(actuals, naivePreds);
-  const seasonalMape = mape(actuals, seasonalPreds);
+  const pipelineWmape = wmape(actuals, pipelinePreds);
+  const naiveWmape = wmape(actuals, naivePreds);
+  const seasonalWmape = wmape(actuals, seasonalPreds);
+  const maseVsNaive = mase(actuals, pipelinePreds, naivePreds);
 
   const improvement = (baseline: number | null): number | null => {
     if (
       baseline == null ||
-      pipelineMape == null ||
+      pipelineWmape == null ||
       Math.abs(baseline) < 1e-9
     ) {
       return null;
     }
-    return (baseline - pipelineMape) / baseline;
+    return (baseline - pipelineWmape) / baseline;
   };
 
   return {
-    pipelineMape,
-    naiveMape,
-    seasonalMape,
-    improvementVsNaive: improvement(naiveMape),
-    improvementVsSeasonal: improvement(seasonalMape),
+    pipelineWmape,
+    naiveWmape,
+    seasonalWmape,
+    maseVsNaive,
+    improvementVsNaive: improvement(naiveWmape),
+    improvementVsSeasonal: improvement(seasonalWmape),
   };
 }
 
@@ -120,7 +141,7 @@ export function BaselineComparisonCard({ timeseries, predictions }: Props) {
     [timeseries, predictions],
   );
 
-  if (!cmp || cmp.pipelineMape == null) return null;
+  if (!cmp || cmp.pipelineWmape == null) return null;
 
   const headline =
     cmp.improvementVsNaive != null
@@ -146,21 +167,29 @@ export function BaselineComparisonCard({ timeseries, predictions }: Props) {
         <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
           <BaselineCell
             label={t('sku_detail.baseline.pipeline')}
-            value={cmp.pipelineMape}
+            value={cmp.pipelineWmape}
             improvement={null}
             tone="primary"
           />
           <BaselineCell
             label={t('sku_detail.baseline.naive')}
-            value={cmp.naiveMape}
+            value={cmp.naiveWmape}
             improvement={cmp.improvementVsNaive}
           />
           <BaselineCell
             label={t('sku_detail.baseline.seasonal')}
-            value={cmp.seasonalMape}
+            value={cmp.seasonalWmape}
             improvement={cmp.improvementVsSeasonal}
           />
         </div>
+        {cmp.maseVsNaive != null && (
+          <p className="text-xs text-slate-500 dark:text-stone-400">
+            MASE = {cmp.maseVsNaive.toFixed(2)}{' '}
+            {cmp.maseVsNaive < 1
+              ? '— naive\'den iyi'
+              : '— naive\'den kötü'}
+          </p>
+        )}
       </CardBody>
     </Card>
   );

@@ -29,7 +29,7 @@ export function ModelProvenancePanel({ win }: { win: WinningCombo }) {
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-1.5 text-sm">
           <Row label="MAE">{fmtDec(win.mae)}</Row>
           <Row label="RMSE">{fmtDec(win.rmse)}</Row>
-          <Row label="MAPE">{fmtPct(win.mape)}</Row>
+          <Row label="wMAPE">{fmtPct(win.mape)}</Row>
           {isEnsemble && (
             <>
               <Row label="w_RF">{fmtDec(win.w_rf)}</Row>
