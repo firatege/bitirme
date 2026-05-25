@@ -25,7 +25,7 @@ class YRandomForest:
             "min_samples_split": params.get("min_samples_split", 2),
             "min_samples_leaf": params.get("min_samples_leaf", 1),
             "random_state": cfg.random_state,
-            "n_jobs": -1,
+            "n_jobs": cfg.sklearn_n_jobs,
         }
         rf = RandomForestRegressor(**p)
         rf.fit(X, y)

@@ -106,33 +106,35 @@ pub async fn seed_config(pool: &PgPool, path: &Path) -> Result<usize> {
     let i_sku = ix("sku")?;
     let i_tc = ix("T_CHECK")?;
     let i_hc = ix("H_COVER")?;
-    let i_qt = ix("q_target")?;
-    let i_lt = ix("lead_time_mo")?;
+    let i_qt = ix("Q")?;
     let i_moq = ix("MOQ")?;
-    let i_lot = ix("lot_size")?;
+    let i_lot = ix("LOT_SIZE")?;
+    let i_sso = ix("STARTING_STOCK_OVERRIDE")?;
 
     let mut n = 0usize;
     for rec in rdr.records() {
         let rec = rec?;
+        let sso: Option<f64> = rec.get(i_sso)
+            .and_then(|v| if v.trim().is_empty() { None } else { v.trim().parse().ok() });
         let q = r#"
             INSERT INTO sku_config (sku, t_check, h_cover, q_target, lead_time_mo, moq, lot_size, starting_stock_override)
-            VALUES ($1, $2, $3, $4, $5, $6, $7, NULL)
+            VALUES ($1, $2, $3, $4, 0, $5, $6, $7)
             ON CONFLICT (sku) DO UPDATE SET
                 t_check = EXCLUDED.t_check,
                 h_cover = EXCLUDED.h_cover,
                 q_target = EXCLUDED.q_target,
-                lead_time_mo = EXCLUDED.lead_time_mo,
                 moq = EXCLUDED.moq,
-                lot_size = EXCLUDED.lot_size
+                lot_size = EXCLUDED.lot_size,
+                starting_stock_override = EXCLUDED.starting_stock_override
         "#;
         let res = sqlx::query(q)
             .bind(rec.get(i_sku).unwrap_or(""))
-            .bind::<i32>(rec.get(i_tc).unwrap_or("0").parse().unwrap_or(0))
-            .bind::<i32>(rec.get(i_hc).unwrap_or("0").parse().unwrap_or(0))
+            .bind::<f64>(rec.get(i_tc).unwrap_or("0").parse().unwrap_or(0.0))
+            .bind::<f64>(rec.get(i_hc).unwrap_or("0").parse().unwrap_or(0.0))
             .bind::<f64>(rec.get(i_qt).unwrap_or("0").parse().unwrap_or(0.0))
-            .bind::<i32>(rec.get(i_lt).unwrap_or("0").parse().unwrap_or(0))
             .bind::<f64>(rec.get(i_moq).unwrap_or("0").parse().unwrap_or(0.0))
             .bind::<f64>(rec.get(i_lot).unwrap_or("1").parse().unwrap_or(1.0))
+            .bind::<Option<f64>>(sso)
             .execute(pool)
             .await;
         match res {

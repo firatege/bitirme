@@ -1,0 +1,2 @@
+-- PostgreSQL enum values cannot be removed; this migration is intentionally a no-op.
+-- To fully revert, drop and recreate the enum (requires dropping dependent tables).

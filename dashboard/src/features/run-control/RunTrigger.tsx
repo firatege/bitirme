@@ -5,6 +5,7 @@ import { ConfirmModal } from '@/shared/ui/ConfirmModal';
 import { useCreateRun, useRunStatus, useSkuList } from '@/shared/api/hooks';
 import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 import { toast } from '@/shared/ui/Toast';
+import { RunProgressBadge } from './RunProgressBadge';
 
 const CONCURRENCY = 4;
 const ACTIVE_RUN_KEY = 'bitirme.activeRunId';
@@ -122,45 +123,7 @@ export function RunTrigger() {
           ? t('run_trigger.triggering')
           : t('actions.trigger_all')}
       </Button>
-      {runId && status.data && (
-        <div className="flex items-center gap-2 text-xs">
-          <span className="text-slate-500">
-            {t('run_trigger.run_label', { runId })}
-          </span>
-          <StatusBadge status={status.data.status} />
-          <span className="text-slate-500">
-            {status.data.jobs.completed}/
-            {status.data.jobs.completed +
-              status.data.jobs.running +
-              status.data.jobs.queued +
-              status.data.jobs.failed}
-          </span>
-        </div>
-      )}
+      {runId && <RunProgressBadge runId={runId} />}
     </div>
-  );
-}
-
-function StatusBadge({ status }: { status: string }) {
-  const { t } = useTranslation();
-  const map: Record<string, string> = {
-    queued:
-      'bg-slate-100 text-slate-700 ring-slate-200 dark:bg-surface-2 dark:text-stone-300 dark:ring-surface-line',
-    running:
-      'bg-sky-100 text-sky-700 ring-sky-200 dark:bg-sky-500/15 dark:text-sky-300 dark:ring-sky-500/30',
-    completed:
-      'bg-brand-100 text-brand-800 ring-brand-200 dark:bg-brand-500/15 dark:text-brand-300 dark:ring-brand-500/30',
-    failed:
-      'bg-rose-100 text-rose-700 ring-rose-200 dark:bg-rose-500/15 dark:text-rose-300 dark:ring-rose-500/30',
-  };
-  const label = t(`status.${status}`, { defaultValue: status });
-  return (
-    <span
-      className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-        map[status] ?? map['queued']
-      }`}
-    >
-      {label}
-    </span>
   );
 }

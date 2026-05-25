@@ -35,6 +35,7 @@ class YXGBoost:
             "reg_lambda": params.get("reg_lambda", 1.2),
             "random_state": cfg.random_state,
             "verbosity": 0,
+            "nthread": cfg.sklearn_n_jobs,
         }
         if cfg.use_gpu_xgb:
             kwargs["tree_method"] = "hist"

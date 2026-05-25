@@ -19,7 +19,8 @@ class ExogProphet:
     def fit(cls, train_df: pd.DataFrame, col: str) -> "ExogProphet":
         if not HAVE_PROPHET:
             raise RuntimeError("prophet not installed")
-        m = Prophet(yearly_seasonality=True, weekly_seasonality=False)
+        m = Prophet(yearly_seasonality=True, weekly_seasonality=False,
+                    daily_seasonality=False, uncertainty_samples=0)
         m.fit(train_df.rename(columns={col: "y"}))
         return cls(m, col)
 

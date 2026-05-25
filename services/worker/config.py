@@ -67,6 +67,11 @@ class WorkerConfig:
     seed: int = _env_int("SEED", 1337)
     random_state: int = _env_int("RANDOM_STATE", 42)
 
+    # sklearn/XGBoost thread budget per SKU.
+    # With MAX_PARALLEL_JOBS=8 on a 20-thread CPU: 8×3=24 — light oversubscription,
+    # far better than 8×20=160 with n_jobs=-1.
+    sklearn_n_jobs: int = _env_int("SKLEARN_N_JOBS", 3)
+
     # ROCV / Refit
     enable_refit: bool = _env_bool("ENABLE_REFIT", True)
     refit_tail_k: int = _env_int("REFIT_TAIL_K", 2)
@@ -81,6 +86,8 @@ class WorkerConfig:
     tsb_near_zero_eps: float = _env_float("TSB_NEAR_ZERO_EPS", 1e-6)
     # Zero-ratio threshold above which TSB is forced as winner (bypasses MAE competition).
     # Motivation: RF/XGB are biased high on >50% zero series; TSB's level estimate is safer.
+    # Months with no sales before test_start → skip all ML, emit zero forecast.
+    dead_sku_window_mo: int = _env_int("DEAD_SKU_WINDOW_MO", 12)
     intermittent_force_zero_ratio: float = _env_float("INTERMITTENT_FORCE_ZERO_RATIO", 0.50)
 
     # Bias correction: scale predictions by val-period mean(y)/mean(yhat).

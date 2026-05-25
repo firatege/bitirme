@@ -5,7 +5,17 @@ on noisy lubricant distributor data. Grid search still runs but excludes damp=Tr
 """
 from __future__ import annotations
 
+import warnings
+
 import numpy as np
+
+warnings.filterwarnings("ignore", category=UserWarning, module="statsmodels")
+warnings.filterwarnings("ignore", category=RuntimeWarning, module="statsmodels")
+try:
+    from statsmodels.tools.sm_exceptions import ConvergenceWarning
+    warnings.filterwarnings("ignore", category=ConvergenceWarning)
+except ImportError:
+    pass
 import pandas as pd
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 
@@ -19,29 +29,43 @@ class ExogEts:
     def fit(cls, train_df: pd.DataFrame, col: str) -> "ExogEts":
         y = train_df.set_index("ds")[col]
         y.index.freq = "MS"
+
+        # Degenerate series (all-zero or constant) → skip grid, use simple model
+        nonzero = (y > 0).sum()
+        if nonzero < 3 or y.std() < 1e-9:
+            try:
+                best = ExponentialSmoothing(y, trend=None, seasonal=None).fit(optimized=True)
+            except Exception:
+                best = ExponentialSmoothing(y + 1e-6, trend=None, seasonal=None).fit(optimized=True)
+            return cls(best, col)
+
         best, best_aic = None, np.inf
         # damp=False only — opt/ets_playground finding: damped adds noise on this data
         for trend in ["add", "mul", None]:
             for seas in ["add", "mul", None]:
                 try:
-                    if seas is None:
-                        m = ExponentialSmoothing(
-                            y, trend=trend, seasonal=None, damped_trend=False
-                        ).fit(optimized=True)
-                    else:
-                        m = ExponentialSmoothing(
-                            y, trend=trend, seasonal=seas, seasonal_periods=12,
-                            damped_trend=False,
-                        ).fit(optimized=True)
+                    with warnings.catch_warnings(), np.errstate(divide="ignore", invalid="ignore"):
+                        warnings.simplefilter("ignore")
+                        if seas is None:
+                            m = ExponentialSmoothing(
+                                y, trend=trend, seasonal=None, damped_trend=False
+                            ).fit(optimized=True)
+                        else:
+                            m = ExponentialSmoothing(
+                                y, trend=trend, seasonal=seas, seasonal_periods=12,
+                                damped_trend=False,
+                            ).fit(optimized=True)
                     aic = getattr(m, "aic", np.inf)
-                    if aic < best_aic:
+                    if np.isfinite(aic) and aic < best_aic:
                         best_aic, best = aic, m
                 except Exception:
                     continue
         if best is None:
-            best = ExponentialSmoothing(
-                y, trend="add", seasonal="add", seasonal_periods=12
-            ).fit(optimized=True)
+            with warnings.catch_warnings(), np.errstate(divide="ignore", invalid="ignore"):
+                warnings.simplefilter("ignore")
+                best = ExponentialSmoothing(
+                    y, trend=None, seasonal=None
+                ).fit(optimized=True)
         return cls(best, col)
 
     def forecast(self, steps: int, future_idx: pd.DatetimeIndex) -> pd.DataFrame:

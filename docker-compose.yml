@@ -25,6 +25,7 @@ services:
       B_BOOT: ${B_BOOT:-150}
       DRIFT_EPS: ${DRIFT_EPS:-0.20}
       USE_GPU_XGB: ${USE_GPU_XGB:-False}
+      SKLEARN_N_JOBS: ${SKLEARN_N_JOBS:-3}
     volumes:
       - models_data:/app/models
     healthcheck:

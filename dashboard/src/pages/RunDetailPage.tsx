@@ -43,6 +43,17 @@ export function RunDetailPage() {
   const pct = total > 0 ? Math.round((s.jobs.completed / total) * 100) : 0;
   const statusTone = STATUS_TONES[s.status] ?? STATUS_TONES.queued;
 
+  const eta = (() => {
+    if (s.status !== 'running' || !s.started_at || s.jobs.completed === 0) return null;
+    const elapsedMs = Date.now() - new Date(s.started_at).getTime();
+    if (elapsedMs < 5_000) return null;
+    const remaining = s.jobs.queued + s.jobs.running;
+    if (remaining === 0) return null;
+    const etaMs = (elapsedMs / s.jobs.completed) * remaining;
+    const etaMin = Math.round(etaMs / 60_000);
+    return etaMin < 1 ? '< 1 dk' : `~${etaMin} dk`;
+  })();
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-3">
@@ -60,10 +71,27 @@ export function RunDetailPage() {
         >
           {s.status}
         </span>
-        <div className="ml-auto text-xs text-slate-500 dark:text-stone-400">
-          {pct}% tamam
+        <div className="ml-auto flex items-center gap-3 text-xs text-slate-500 dark:text-stone-400">
+          <span className="tabular-nums font-medium text-slate-700 dark:text-stone-200">
+            {s.jobs.completed}/{total} SKU
+          </span>
+          <span>{pct}% tamam</span>
+          {eta && (
+            <span className="text-sky-600 dark:text-sky-400 font-medium">
+              {eta} kaldı
+            </span>
+          )}
         </div>
       </div>
+
+      {s.status === 'running' && total > 0 && (
+        <div className="h-2 w-full rounded-full bg-slate-100 dark:bg-surface-2 overflow-hidden">
+          <div
+            className="h-full rounded-full bg-sky-500 transition-all duration-700"
+            style={{ width: `${pct}%` }}
+          />
+        </div>
+      )}
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Stat label="Toplam Job" value={fmtInt(total)} tone="brand" />

@@ -28,7 +28,7 @@ class MLExogRF:
         rf = RandomForestRegressor(
             n_estimators=n_est, max_depth=8,
             min_samples_split=2, min_samples_leaf=1,
-            random_state=cfg.random_state, n_jobs=-1,
+            random_state=cfg.random_state, n_jobs=cfg.sklearn_n_jobs,
         )
         rf.fit(d[feats], d[col])
         return cls(rf, col)
@@ -52,7 +52,7 @@ class MLExogRF:
                     "lag1": [last], "lag3": [lag3],
                     "month": [ds.month], "year": [ds.year],
                 })
-            yhat = max(0.0, float(self._model.predict(row.to_numpy())[0]))
+            yhat = max(0.0, float(self._model.predict(row)[0]))
             out.append({"ds": ds, col: yhat})
             full = pd.concat(
                 [full, pd.DataFrame({"ds": [ds], col: [yhat]})], ignore_index=True

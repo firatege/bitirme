@@ -33,7 +33,6 @@ def recursive_forward_predict_y(
             tmp.loc[tmp["ds"] == ds, feats]
             .replace([np.inf, -np.inf], np.nan)
             .fillna(0)
-            .to_numpy()
         )
         yhat = float(model.predict(row)[0])
         if not np.isfinite(yhat):

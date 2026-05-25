@@ -62,11 +62,52 @@ def _panel_to_df(request: ForecastColdRequest) -> pd.DataFrame:
     return ensure_ms_freq(df)
 
 
+def _zero_forecast_result(request: ForecastColdRequest) -> ForecastResult:
+    """Return a zeroed ForecastResult for dead SKUs (no sales in dead_sku_window_mo months).
+    Skips all ML — runs in milliseconds."""
+    cfg = get_config()
+    fut = pd.date_range(cfg.test_start, cfg.test_end, freq="MS")
+    d_full = _panel_to_df(request)
+    truth = {
+        row.ds.strftime("%Y-%m-%d"): row.y
+        for _, row in d_full[
+            (d_full["ds"] >= cfg.test_start) & (d_full["ds"] <= cfg.test_end)
+        ].iterrows()
+    }
+    predictions = [
+        PredictionRow(ds=ds.strftime("%Y-%m-%d"), y=truth.get(ds.strftime("%Y-%m-%d")), yhat=0.0,
+                      pi80_lo=0.0, pi80_hi=0.0, pi95_lo=0.0, pi95_hi=0.0)
+        for ds in fut
+    ]
+    params = request.params_row
+    blob_dir_for(Path(request.blob_dir).parent.parent, request.sku, request.run_id).mkdir(parents=True, exist_ok=True)
+    return ForecastResult(
+        sku=request.sku, run_id=request.run_id, mode="dead_sku",
+        winning=WinningCombo(
+            horizon="Full", exog="Zero", y_variant="Zero", phase="PRE",
+            mae=0.0, rmse=0.0, mape=0.0,
+        ),
+        combinations=[], models=[], exog_selection=[], val_residuals=[],
+        predictions=predictions,
+        recommendation=RecommendationRow(
+            starting_stock=0.0, t_check=int(params.t_check), h_cover=int(params.h_cover),
+            q_target=float(params.q_target), moq=float(params.moq), lot_size=float(params.lot_size),
+            cum_demand_q=0.0, order_qty_raw=0.0, order_qty_rounded=0.0,
+        ),
+    )
+
+
 def run_cold(request: ForecastColdRequest, critical_skus: set[str] | None = None) -> ForecastResult:
     cfg = get_config()
     critical_skus = critical_skus or set()
 
     d = _panel_to_df(request)
+
+    # Dead SKU fast path: no sales in last dead_sku_window_mo months → zero forecast
+    cutoff = cfg.test_start - pd.DateOffset(months=cfg.dead_sku_window_mo)
+    recent_sales = d[d["ds"] >= cutoff]["y"]
+    if pd.to_numeric(recent_sales, errors="coerce").fillna(0.0).sum() == 0:
+        return _zero_forecast_result(request)
     mask_train = d["ds"] < cfg.val_start
     mask_val = (d["ds"] >= cfg.val_start) & (d["ds"] <= cfg.val_end)
 
