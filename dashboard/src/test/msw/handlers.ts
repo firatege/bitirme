@@ -19,6 +19,11 @@ export const handlers = [
     return HttpResponse.json(fixtureSkuHistory(String(params.sku)));
   }),
 
+  // GET /runs (list)
+  http.get('*/runs', () => {
+    return HttpResponse.json([fixtureRunStatus(1001), fixtureRunStatus(1000)]);
+  }),
+
   // GET /runs/:runId
   http.get('*/runs/:runId', ({ params }) => {
     return HttpResponse.json(fixtureRunStatus(Number(params.runId)));

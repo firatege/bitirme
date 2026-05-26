@@ -115,6 +115,20 @@ export function useRunStatus(runId: number | null) {
   });
 }
 
+export function useRunsList() {
+  return useQuery({
+    queryKey: queryKeys.runs(),
+    queryFn: () => dataSource.listRuns(),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return 5_000;
+      return data.some((r) => r.status === 'queued' || r.status === 'running')
+        ? 5_000
+        : false;
+    },
+  });
+}
+
 export function useCreateRun() {
   const qc = useQueryClient();
   return useMutation({

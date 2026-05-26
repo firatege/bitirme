@@ -49,6 +49,7 @@ pub async fn serve(addr: SocketAddr, state: AppState) -> std::io::Result<()> {
             .service(healthz)
             .service(readyz)
             .service(create_run)
+            .service(list_runs)
             .service(get_run)
             .service(get_run_sku)
             .service(forecast_sku)
@@ -246,6 +247,63 @@ fn spawn_run_loop(state: AppState, run_id: i64, concurrency: usize, check_drift:
 }
 
 // --------------------------- Status / query endpoints ---------------------------
+
+#[derive(serde::Deserialize)]
+struct ListRunsParams {
+    limit: Option<i64>,
+}
+
+/// GET /runs — recent forecast runs (newest first) with per-status job counts.
+/// Server-authoritative history: every triggered run is visible to all clients,
+/// independent of any per-browser local state.
+#[get("/runs")]
+async fn list_runs(
+    state: Data<AppState>,
+    q: Query<ListRunsParams>,
+) -> Result<HttpResponse, ApiError> {
+    let limit = q.limit.unwrap_or(100).clamp(1, 1000);
+    let rows = sqlx::query(
+        r#"
+        SELECT r.run_id,
+               r.status::text       AS status,
+               r.started_at::text   AS started_at,
+               r.completed_at::text AS completed_at,
+               r.pipeline_version,
+               COALESCE(
+                 (SELECT jsonb_object_agg(s.status, s.n)
+                  FROM (SELECT status::text AS status, COUNT(*)::int8 AS n
+                        FROM forecast_jobs WHERE run_id = r.run_id
+                        GROUP BY status) s),
+                 '{}'::jsonb
+               )::text AS jobs
+        FROM forecast_runs r
+        ORDER BY r.run_id DESC
+        LIMIT $1
+        "#,
+    )
+    .bind(limit)
+    .fetch_all(&state.pool)
+    .await?;
+
+    let out: Vec<Value> = rows
+        .iter()
+        .map(|r| -> Result<Value, ApiError> {
+            let jobs_txt: String = r.try_get("jobs")?;
+            let jobs: Value =
+                serde_json::from_str(&jobs_txt).unwrap_or_else(|_| serde_json::json!({}));
+            Ok(serde_json::json!({
+                "run_id": r.try_get::<i64, _>("run_id")?,
+                "status": r.try_get::<String, _>("status")?,
+                "started_at": r.try_get::<Option<String>, _>("started_at")?,
+                "completed_at": r.try_get::<Option<String>, _>("completed_at")?,
+                "pipeline_version": r.try_get::<String, _>("pipeline_version")?,
+                "jobs": jobs,
+            }))
+        })
+        .collect::<Result<_, _>>()?;
+
+    Ok(HttpResponse::Ok().json(out))
+}
 
 #[get("/runs/{run_id}")]
 async fn get_run(

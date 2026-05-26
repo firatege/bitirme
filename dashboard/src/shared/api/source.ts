@@ -29,6 +29,7 @@ export interface ForecastDataSource {
   getSkuTimeseries(sku: string, months?: number): Promise<SkuTimeseries>;
   getSkuPredictions(sku: string, runId?: number): Promise<SkuPredictions>;
   getRunStatus(runId: number): Promise<RunStatus>;
+  listRuns(limit?: number): Promise<RunStatus[]>;
   getRunJobs(runId: number): Promise<RunJobs>;
   getSkuPin(sku: string): Promise<SkuPin>;
   setSkuPin(sku: string, runId: number): Promise<SkuPin>;
@@ -62,6 +63,11 @@ class ControllerAdapter implements ForecastDataSource {
   async getRunStatus(runId: number): Promise<RunStatus> {
     const { data } = await apiClient.get(endpoints.run(runId));
     return RunStatusSchema.parse(data);
+  }
+
+  async listRuns(limit = 100): Promise<RunStatus[]> {
+    const { data } = await apiClient.get(endpoints.runs, { params: { limit } });
+    return RunStatusSchema.array().parse(data);
   }
 
   async getRunJobs(runId: number): Promise<RunJobs> {

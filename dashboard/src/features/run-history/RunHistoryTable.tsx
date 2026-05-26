@@ -1,12 +1,8 @@
-import { useMemo } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { useQueries } from '@tanstack/react-query';
-import { dataSource } from '@/shared/api/source';
-import { queryKeys } from '@/shared/api/queryKeys';
-import { useRunHistoryStore } from './runHistoryStore';
+import { useNavigate } from 'react-router-dom';
+import { useRunsList } from '@/shared/api/hooks';
 import { Card } from '@/shared/ui/Card';
 import { EmptyState } from '@/shared/ui/EmptyState';
-import { Button } from '@/shared/ui/Button';
+import { Skeleton } from '@/shared/ui/Skeleton';
 
 const STATUS_TONE: Record<string, string> = {
   queued:
@@ -20,71 +16,53 @@ const STATUS_TONE: Record<string, string> = {
 };
 
 export function RunHistoryTable() {
-  const entries = useRunHistoryStore((s) => s.entries);
-  const clear = useRunHistoryStore((s) => s.clear);
   const navigate = useNavigate();
+  const { data: runs, isLoading, isError } = useRunsList();
 
-  const queries = useQueries({
-    queries: entries.map((e) => ({
-      queryKey: queryKeys.run(e.run_id),
-      queryFn: () => dataSource.getRunStatus(e.run_id),
-      refetchInterval: (query: { state: { data?: { status?: string } } }) => {
-        const s = query.state.data?.status;
-        return s === 'completed' || s === 'failed' ? false : 5_000;
-      },
-      retry: 0,
-    })),
-  });
+  if (isLoading) {
+    return <Skeleton className="h-64" />;
+  }
 
-  const rows = useMemo(
-    () =>
-      entries.map((e, i) => ({
-        ...e,
-        status: queries[i]?.data,
-        isLoading: queries[i]?.isLoading ?? false,
-        isError: queries[i]?.isError ?? false,
-      })),
-    [entries, queries],
-  );
+  if (isError) {
+    return (
+      <EmptyState
+        title="Çalışmalar yüklenemedi"
+        description="Controller'a ulaşılamadı. Servis ayakta mı kontrol edin; sayfa otomatik yeniden denenecek."
+      />
+    );
+  }
 
-  if (entries.length === 0) {
+  if (!runs || runs.length === 0) {
     return (
       <EmptyState
         title="Henüz çalışma yok"
-        description="Ana ekrandan 'Tümünü Çalıştır' veya bir SKU detayından yeniden çalıştır butonuna tıklayın. Tetiklediğiniz tüm runlar burada listelenir."
+        description="Ana ekrandan 'Tümünü Çalıştır' veya bir SKU detayından yeniden çalıştır butonuna tıklayın. Tüm runlar burada listelenir."
       />
     );
   }
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-slate-500 dark:text-stone-400">
-          {entries.length} kayıtlı çalışma · son 50 saklanır
-        </span>
-        <Button size="sm" variant="secondary" onClick={clear}>
-          Geçmişi Temizle
-        </Button>
-      </div>
+      <span className="text-xs text-slate-500 dark:text-stone-400">
+        {runs.length} çalışma · sunucudan canlı
+      </span>
       <Card>
         <table className="w-full text-sm">
           <thead className="border-b border-slate-200 bg-slate-50 text-xs text-slate-500 dark:border-surface-line dark:bg-surface-2/30 dark:text-stone-400">
             <tr>
               <th className="px-4 py-3 text-left font-medium">Run #</th>
-              <th className="px-4 py-3 text-left font-medium">Tetikleyen</th>
               <th className="px-4 py-3 text-left font-medium">Durum</th>
               <th className="px-4 py-3 text-right font-medium">Job (tamam/toplam)</th>
               <th className="px-4 py-3 text-left font-medium">Bitiş</th>
             </tr>
           </thead>
           <tbody>
-            {rows.map((r) => {
-              const s = r.status;
+            {runs.map((r) => {
               const total =
-                (s?.jobs?.queued ?? 0) +
-                (s?.jobs?.running ?? 0) +
-                (s?.jobs?.completed ?? 0) +
-                (s?.jobs?.failed ?? 0);
+                (r.jobs?.queued ?? 0) +
+                (r.jobs?.running ?? 0) +
+                (r.jobs?.completed ?? 0) +
+                (r.jobs?.failed ?? 0);
               return (
                 <tr
                   key={r.run_id}
@@ -104,48 +82,22 @@ export function RunHistoryTable() {
                       #{r.run_id}
                     </span>
                   </td>
-                  <td className="px-4 py-3 text-xs text-slate-700 dark:text-stone-300">
-                    {r.trigger === 'sku' ? (
-                      <span>
-                        SKU:{' '}
-                        <Link
-                          to={`/skus/${encodeURIComponent(r.sku ?? '')}`}
-                          onClick={(e) => e.stopPropagation()}
-                          className="font-mono text-brand-700 hover:underline dark:text-brand-300"
-                        >
-                          {r.sku}
-                        </Link>
-                      </span>
-                    ) : (
-                      'Toplu'
-                    )}
-                  </td>
                   <td className="px-4 py-3">
-                    {r.isError ? (
-                      <span className="text-xs text-rose-600 dark:text-rose-400">
-                        ulaşılamadı
-                      </span>
-                    ) : s ? (
-                      <span
-                        className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                          STATUS_TONE[s.status] ?? STATUS_TONE['queued']
-                        }`}
-                      >
-                        {s.status}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-slate-400 dark:text-stone-200/30">…</span>
-                    )}
+                    <span
+                      className={`rounded-md px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
+                        STATUS_TONE[r.status] ?? STATUS_TONE['queued']
+                      }`}
+                    >
+                      {r.status}
+                    </span>
                   </td>
                   <td className="px-4 py-3 text-right font-mono tabular-nums text-slate-700 dark:text-stone-200">
-                    {s
-                      ? `${s.jobs.completed}/${total}${
-                          s.jobs.failed ? ` (${s.jobs.failed} hata)` : ''
-                        }`
-                      : '—'}
+                    {`${r.jobs.completed}/${total}${
+                      r.jobs.failed ? ` (${r.jobs.failed} hata)` : ''
+                    }`}
                   </td>
                   <td className="px-4 py-3 font-mono text-[11px] text-slate-500 dark:text-stone-400">
-                    {s?.completed_at ? s.completed_at.slice(0, 19) : '—'}
+                    {r.completed_at ? r.completed_at.slice(0, 19) : '—'}
                   </td>
                 </tr>
               );

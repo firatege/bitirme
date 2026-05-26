@@ -17,7 +17,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT COUNT(*) AS n FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m >= 0.5",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT COUNT(*) AS n FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m >= 0.5",
           "refId": "A"
         }
       ],
@@ -44,7 +44,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT COUNT(*) AS n FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r) AND order_qty_rounded > 0",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT COUNT(*) AS n FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r) AND order_qty_rounded > 0",
           "refId": "A"
         }
       ],
@@ -59,7 +59,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT SUM(order_qty_rounded) AS total FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r)",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT SUM(order_qty_rounded) AS total FROM sku_run_recommendation WHERE run_id=(SELECT run_id FROM r)",
           "refId": "A"
         }
       ],
@@ -74,7 +74,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1), per AS (SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id = (SELECT run_id FROM r) AND p.y IS NOT NULL GROUP BY p.sku) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS median_wmape FROM per",
+          "rawSql": "WITH full_run AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1), per AS (SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id = (SELECT run_id FROM full_run) AND p.y IS NOT NULL GROUP BY p.sku) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS median_wmape FROM per",
           "refId": "A"
         }
       ],
@@ -102,7 +102,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1), levels AS (SELECT CASE WHEN p_stockout_3m >= 0.5 THEN 'KRITIK' WHEN p_stockout_3m >= 0.25 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.5 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.25 THEN 'ORTA' WHEN e_t_stockout_mo <= 6 THEN 'ORTA' ELSE 'DUSUK' END AS level FROM sku_runs WHERE run_id = (SELECT run_id FROM r)) SELECT level, COUNT(*) AS n FROM levels GROUP BY level ORDER BY CASE level WHEN 'KRITIK' THEN 1 WHEN 'YUKSEK' THEN 2 WHEN 'ORTA' THEN 3 WHEN 'DUSUK' THEN 4 END",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1), levels AS (SELECT CASE WHEN p_stockout_3m >= 0.5 THEN 'KRITIK' WHEN p_stockout_3m >= 0.25 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.5 THEN 'YUKSEK' WHEN p_stockout_6m >= 0.25 THEN 'ORTA' WHEN e_t_stockout_mo <= 6 THEN 'ORTA' ELSE 'DUSUK' END AS level FROM sku_runs WHERE run_id = (SELECT run_id FROM r)) SELECT level, COUNT(*) AS n FROM levels GROUP BY level ORDER BY CASE level WHEN 'KRITIK' THEN 1 WHEN 'YUKSEK' THEN 2 WHEN 'ORTA' THEN 3 WHEN 'DUSUK' THEN 4 END",
           "refId": "A"
         }
       ],
@@ -126,7 +126,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sr.p_stockout_3m AS p3m, rec.order_qty_rounded AS order_qty, rec.sku AS sku FROM sku_runs sr JOIN sku_run_recommendation rec USING (run_id, sku) WHERE sr.run_id = (SELECT run_id FROM r) AND sr.p_stockout_3m IS NOT NULL ORDER BY rec.order_qty_rounded DESC",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT sr.p_stockout_3m AS p3m, rec.order_qty_rounded AS order_qty, rec.sku AS sku FROM sku_runs sr JOIN sku_run_recommendation rec USING (run_id, sku) WHERE sr.run_id = (SELECT run_id FROM r) AND sr.p_stockout_3m IS NOT NULL ORDER BY rec.order_qty_rounded DESC",
           "refId": "A"
         }
       ],
@@ -183,7 +183,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT rec.sku AS \"SKU\", rec.starting_stock AS \"Stok\", rec.cum_demand_q AS \"Beklenen Talep\", rec.order_qty_rounded AS \"Önerilen\", sr.winning_mae AS \"MAE\", sr.p_stockout_3m AS \"P(stockout, 3 ay)\" FROM sku_run_recommendation rec JOIN sku_runs sr USING (run_id, sku) WHERE rec.run_id=(SELECT run_id FROM r) ORDER BY rec.order_qty_rounded DESC",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT rec.sku AS \"SKU\", rec.starting_stock AS \"Stok\", rec.cum_demand_q AS \"Beklenen Talep\", rec.order_qty_rounded AS \"Önerilen\", sr.winning_mae AS \"MAE\", sr.p_stockout_3m AS \"P(stockout, 3 ay)\" FROM sku_run_recommendation rec JOIN sku_runs sr USING (run_id, sku) WHERE rec.run_id=(SELECT run_id FROM r) ORDER BY rec.order_qty_rounded DESC",
           "refId": "A"
         }
       ],

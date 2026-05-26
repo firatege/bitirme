@@ -17,7 +17,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p_stockout_3m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m IS NOT NULL",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT p_stockout_3m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -33,7 +33,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p_stockout_6m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_6m IS NOT NULL",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT p_stockout_6m AS value FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_6m IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -49,7 +49,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p_stockout_3m AS p3m, p_stockout_6m AS p6m, sku FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m IS NOT NULL AND p_stockout_6m IS NOT NULL",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT p_stockout_3m AS p3m, p_stockout_6m AS p6m, sku FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND p_stockout_3m IS NOT NULL AND p_stockout_6m IS NOT NULL",
           "refId": "A"
         }
       ],
@@ -85,7 +85,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT sku AS \"SKU\", e_t_stockout_mo AS \"E[T_stockout] (ay)\", p_stockout_3m AS \"P(stockout, 3 ay)\" FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND e_t_stockout_mo IS NOT NULL ORDER BY e_t_stockout_mo ASC LIMIT 15",
+          "rawSql": "WITH r AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT sku AS \"SKU\", e_t_stockout_mo AS \"E[T_stockout] (ay)\", p_stockout_3m AS \"P(stockout, 3 ay)\" FROM sku_runs WHERE run_id=(SELECT run_id FROM r) AND e_t_stockout_mo IS NOT NULL ORDER BY e_t_stockout_mo ASC LIMIT 15",
           "refId": "A"
         }
       ],

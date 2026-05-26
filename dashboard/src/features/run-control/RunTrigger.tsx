@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import { Button } from '@/shared/ui/Button';
 import { ConfirmModal } from '@/shared/ui/ConfirmModal';
 import { useCreateRun, useRunStatus, useSkuList } from '@/shared/api/hooks';
-import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 import { toast } from '@/shared/ui/Toast';
 import { RunProgressBadge } from './RunProgressBadge';
 
@@ -37,7 +36,6 @@ export function RunTrigger() {
   const [showConfirm, setShowConfirm] = useState(false);
   const create = useCreateRun();
   const status = useRunStatus(runId);
-  const recordRun = useRunHistoryStore((s) => s.record);
   const skuList = useSkuList();
 
   const skuCount = skuList.data?.length ?? null;
@@ -62,7 +60,6 @@ export function RunTrigger() {
       });
       setRunId(res.run_id);
       persistRunId(res.run_id);
-      recordRun({ run_id: res.run_id, trigger: 'all' });
       toast(
         t('run_trigger.queued', { runId: res.run_id, jobs: res.jobs }),
         'success',

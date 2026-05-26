@@ -37,7 +37,7 @@
       "targets": [
         {
           "format": "time_series",
-          "rawSql": "WITH per AS (SELECT fr.completed_at AS t, p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p JOIN forecast_runs fr USING (run_id) WHERE p.sku ~ '${sku:regex}' AND p.y IS NOT NULL AND $__timeFilter(fr.completed_at) GROUP BY fr.completed_at, p.sku) SELECT t AS time, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS \"median\", PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY wmape) AS \"p10\", PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY wmape) AS \"p90\" FROM per GROUP BY t ORDER BY t",
+          "rawSql": "WITH full_runs AS (SELECT run_id FROM forecast_jobs GROUP BY run_id HAVING COUNT(*) >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel)), per AS (SELECT fr.completed_at AS t, p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p JOIN forecast_runs fr USING (run_id) WHERE p.run_id IN (SELECT run_id FROM full_runs) AND p.sku ~ '${sku:regex}' AND p.y IS NOT NULL AND $__timeFilter(fr.completed_at) GROUP BY fr.completed_at, p.sku) SELECT t AS time, PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS \"median\", PERCENTILE_CONT(0.1) WITHIN GROUP (ORDER BY wmape) AS \"p10\", PERCENTILE_CONT(0.9) WITHIN GROUP (ORDER BY wmape) AS \"p90\" FROM per GROUP BY t ORDER BY t",
           "refId": "A"
         }
       ],
@@ -66,27 +66,29 @@
     {
       "id": 2,
       "type": "table",
-      "title": "Son run — SKU başına wMAPE / MAE / Bias (wMAPE'ye göre sıralı)",
-      "description": "Son run'da her SKU'nun kazanan trayektorisi için üç metrik. wMAPE = Σ|y−ŷ|/Σy → talep ölçeğinden bağımsız, sıfır/kesikli aylardan patlamayan portföy-uyumlu hata (MAPE'nin aksine). MAE = ortalama mutlak hata (adet). Bias = Σ(ŷ−y)/Σy → pozitif: fazla tahmin (overstock riski), negatif: az tahmin (stockout riski). En üstteki satırlar = en kötü tahmin edilen SKU'lar.",
+      "title": "Son run — en yüksek mutlak hata (adet) · sipariş önceliği",
+      "description": "SKU'lar yüzde (wMAPE) yerine MUTLAK HATA ADEDİNE göre sıralı. Neden: % düşük hacimli SKU'ları şişirip (ör. 0 satışa 15 tahmin → %1000) yüksek hacimli kritik hataları gizliyor. hata_adet = Σ|gerçek−tahmin| (toplam şaşan adet). net_sapma = Σ(tahmin−gerçek): NEGATİF (kırmızı) = az tahmin = stockout riski; pozitif = fazla tahmin = overstock. En üstteki SKU'lar en çok adet kaybettiren/bağlayan = gerçek aksiyon önceliği. wMAPE sadece referans.",
       "gridPos": { "h": 10, "w": 12, "x": 0, "y": 10 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH last_run AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape, AVG(ABS(p.y - p.yhat)) AS mae, SUM(p.yhat - p.y) / NULLIF(SUM(p.y), 0) AS bias FROM sku_run_predictions p WHERE p.run_id = (SELECT run_id FROM last_run) AND p.y IS NOT NULL GROUP BY p.sku ORDER BY wmape DESC NULLS LAST LIMIT 25",
+          "rawSql": "WITH full_run AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT p.sku, SUM(ABS(p.y - p.yhat)) AS hata_adet, SUM(p.y) AS satis, SUM(p.yhat - p.y) AS net_sapma, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id = (SELECT run_id FROM full_run) AND p.y IS NOT NULL GROUP BY p.sku ORDER BY hata_adet DESC NULLS LAST LIMIT 25",
           "refId": "A"
         }
       ],
       "options": { "showHeader": true, "cellHeight": "sm" },
       "fieldConfig": {
-        "defaults": { "unit": "short", "decimals": 2 },
+        "defaults": { "unit": "short", "decimals": 0 },
         "overrides": [
-          { "matcher": { "id": "byName", "options": "wmape" }, "properties": [
-            { "id": "unit", "value": "percentunit" },
+          { "matcher": { "id": "byName", "options": "hata_adet" }, "properties": [
             { "id": "custom.cellOptions", "value": { "type": "color-background" } },
-            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": 0 }, { "color": "yellow", "value": 0.2 }, { "color": "red", "value": 0.5 } ] } }
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "green", "value": 0 }, { "color": "yellow", "value": 1000 }, { "color": "red", "value": 5000 } ] } }
           ] },
-          { "matcher": { "id": "byName", "options": "bias" }, "properties": [ { "id": "unit", "value": "percentunit" } ] },
-          { "matcher": { "id": "byName", "options": "mae" }, "properties": [ { "id": "unit", "value": "short" } ] }
+          { "matcher": { "id": "byName", "options": "net_sapma" }, "properties": [
+            { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [ { "color": "red", "value": null }, { "color": "green", "value": 0 } ] } }
+          ] },
+          { "matcher": { "id": "byName", "options": "wmape" }, "properties": [ { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 0 } ] }
         ]
       }
     },
@@ -99,7 +101,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1), per AS (SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id IN (SELECT run_id FROM r) AND p.y IS NOT NULL GROUP BY p.sku) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS median_wmape FROM per",
+          "rawSql": "WITH full_run AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1), per AS (SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id IN (SELECT run_id FROM full_run) AND p.y IS NOT NULL GROUP BY p.sku) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS median_wmape FROM per",
           "refId": "A"
         }
       ],
@@ -127,7 +129,7 @@
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT (winning_exog || ' · ' || winning_y_variant::text) AS model, COUNT(*) AS n FROM sku_runs WHERE run_id = (SELECT run_id FROM r) AND winning_exog IS NOT NULL GROUP BY 1 ORDER BY n DESC",
+          "rawSql": "WITH full_run AS (SELECT fr.run_id FROM forecast_runs fr JOIN (SELECT run_id, COUNT(*) n FROM forecast_jobs GROUP BY run_id) j USING (run_id) WHERE fr.status='completed' AND j.n >= 0.5 * (SELECT COUNT(DISTINCT sku) FROM sales_panel) ORDER BY fr.completed_at DESC LIMIT 1) SELECT (winning_exog || ' · ' || winning_y_variant::text) AS model, COUNT(*) AS n FROM sku_runs WHERE run_id = (SELECT run_id FROM full_run) AND winning_exog IS NOT NULL GROUP BY 1 ORDER BY n DESC",
           "refId": "A"
         }
       ],

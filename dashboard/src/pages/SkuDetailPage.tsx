@@ -30,7 +30,6 @@ import { AnomalyFlagCard } from '@/features/sku-detail/AnomalyFlagCard';
 import { BaselineComparisonCard } from '@/features/sku-detail/BaselineComparisonCard';
 import { RunPinControl } from '@/features/sku-detail/RunPinControl';
 import { RunProgressBadge } from '@/features/run-control/RunProgressBadge';
-import { useRunHistoryStore } from '@/features/run-history/runHistoryStore';
 
 const SKU_RUN_KEY = (sku: string) => `bitirme.skuRun.${sku}`;
 
@@ -64,7 +63,6 @@ export function SkuDetailPage() {
   const timeseries = useSkuTimeseries(sku);
   const predictions = useSkuPredictions(sku);
   const trigger = useTriggerSkuForecast();
-  const recordRun = useRunHistoryStore((s) => s.record);
   const [showConfirm, setShowConfirm] = useState(false);
   const [activeRunId, setActiveRunId] = useState<number | null>(() =>
     readPersistedRunId(sku),
@@ -101,7 +99,6 @@ export function SkuDetailPage() {
       const res = await trigger.mutateAsync(sku);
       setActiveRunId(res.run_id);
       persistRunId(sku, res.run_id);
-      recordRun({ run_id: res.run_id, trigger: 'sku', sku });
       toast(
         t('run_trigger.queued', { runId: res.run_id, jobs: res.jobs }),
         'success',
