@@ -68,13 +68,13 @@
     {
       "id": 4,
       "type": "stat",
-      "title": "Median MAPE (son run)",
-      "description": "Son run'da kazanan kombinasyonların MAPE medyanı — ölçek-bağımsız portföy doğruluk skoru. ≤%15 iyi, ≤%30 kabul, >%30 incele. SKU başına dağılım için Model Performans dashboard'una bakın.",
+      "title": "Median wMAPE (son run)",
+      "description": "Son run'da kazanan trayektorilerin wMAPE medyanı (Σ|y−ŷ|/Σy) — ölçek-bağımsız, sıfır/kesikli aylardan patlamayan portföy doğruluk skoru. ≤%20 iyi, ≤%50 kabul, >%50 incele. SKU başına dağılım için Model Performans dashboard'una bakın.",
       "gridPos": { "h": 5, "w": 6, "x": 18, "y": 0 },
       "targets": [
         {
           "format": "table",
-          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY c.mape / 100.0) AS median_mape FROM sku_runs sr JOIN sku_run_combinations c ON c.run_id = sr.run_id AND c.sku = sr.sku AND c.horizon = sr.winning_horizon AND c.exog = sr.winning_exog AND c.y_variant = sr.winning_y_variant AND c.phase = sr.winning_phase WHERE sr.run_id = (SELECT run_id FROM r) AND c.mape IS NOT NULL",
+          "rawSql": "WITH r AS (SELECT run_id FROM forecast_runs WHERE status='completed' ORDER BY completed_at DESC LIMIT 1), per AS (SELECT p.sku, SUM(ABS(p.y - p.yhat)) / NULLIF(SUM(p.y), 0) AS wmape FROM sku_run_predictions p WHERE p.run_id = (SELECT run_id FROM r) AND p.y IS NOT NULL GROUP BY p.sku) SELECT PERCENTILE_CONT(0.5) WITHIN GROUP (ORDER BY wmape) AS median_wmape FROM per",
           "refId": "A"
         }
       ],
@@ -86,8 +86,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "green",  "value": 0 },
-              { "color": "yellow", "value": 0.15 },
-              { "color": "red",    "value": 0.30 }
+              { "color": "yellow", "value": 0.20 },
+              { "color": "red",    "value": 0.50 }
             ]
           }
         }
