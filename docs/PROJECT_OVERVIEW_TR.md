@@ -1,19 +1,19 @@
 # Proje Genel Bakışı — Çoklu-SKU Satış Tahmini ve Sipariş Yönetim Sistemi
 
-> Türkçe bitirme tezi projesi. Motul benzeri bir yağ distribütörü için SKU bazlı talep tahmini + otomatik satın alma sipariş önerisi sistemi. Dışsal değişkenler için zaman serisi topluluğu (Prophet + SARIMA + ETS), hedef değişken için ağaç tabanlı topluluk (Random Forest + XGBoost), karıştırma için NNLS stacking, seyrek SKU'lar için kesintili talep modelleri, bootstrap tahmin aralıkları ve MOQ/lot kısıtlı sipariş büyüklüğü kullanılır.
+> Türkçe bitirme tezi projesi. Motul benzeri bir yağ distribütörü için SKU bazlı talep tahmini + otomatik satın alma sipariş önerisi sistemi. Tahmin çekirdeği: dışsal değişkenler için zaman serisi topluluğu (Prophet + SARIMA + ETS + Carry-Forward), hedef değişken için ağaç tabanlı topluluk (Random Forest + XGBoost), karıştırma için NNLS stacking, seyrek SKU'lar için kesintili talep modelleri (Croston / SBA / TSB), kalibre %80/%95 PI için bootstrap, MOQ/lot kısıtlı sipariş büyüklüğü. **Bu çekirdek, üretimde bir microservice yığını altında çalışır**: Rust controller + Python FastAPI worker + React dashboard + Postgres, hepsi Helm üzerinden tek-namespace k8s deployment.
 
-Türkçe, tez odaklı bir anlatım [`proje_ozeti.md`](../proje_ozeti.md) dosyasında mevcuttur. Bu dokümanın amacı mühendislik bakış açısıyla tamamlayıcı olmak: dosya haritası, modül sorumlulukları, veri akışı ve mimari.
+Tez anlatımı için [`proje_ozeti.md`](../proje_ozeti.md), Claude Code çalışma notları için [`CLAUDE.md`](../CLAUDE.md). Bu dosya mühendislik bakışı: servis topolojisi, repo haritası, modül sorumlulukları, veri akışı, deployment, kod-sağlık notları.
 
 ---
 
 ## 1. Bu Proje Ne Yapıyor?
 
-Aylık `(sku, ds, y, orders, stock)` paneli — gerçekleşen satışlar, gelen satın alma siparişleri, ay sonu stok — ve SKU bazlı politika dosyası `sku_config.csv` (MOQ, lot büyüklüğü, kapsam ufku, servis seviyesi kuantili) verildiğinde sistem her SKU için iki soruya cevap üretir:
+Aylık `(sku, ds, y, orders, stock)` paneli — gerçekleşen satışlar, gelen satın alma siparişleri, ay sonu stok — ve SKU bazlı politika dosyası `sku_config.csv` (MOQ, lot büyüklüğü, kapsam ufku, servis seviyesi kuantili, başlangıç stok override) verildiğinde sistem her SKU için iki soruya cevap üretir:
 
 1. **Önümüzdeki 3 / 6 ayda ne kadar satacak?** — sadece nokta tahmini değil, %80 ve %95 tahmin aralıklı.
-2. **Şu an kaç adet sipariş verilmeli, bu inceleme döneminde sipariş açılmalı mı?** — MOQ ve lot büyüklüğüne saygı göstererek, mevcut eldeki stoğa karşı stoksuz kalma olasılığı tarafından sürülerek.
+2. **Şu an kaç adet sipariş verilmeli, bu inceleme döneminde sipariş açılmalı mı?** — MOQ ve lot büyüklüğüne saygı göstererek, mevcut stoğa karşı stoksuz kalma olasılığı tarafından sürülerek.
 
-Tahmin sisteminin temel mantığı şu gözlemdir: **talep stok tarafından sansürlendiğinde (censored demand)** naif satış tahmini yanıltıcıdır — geçen ay sıfır satan bir SKU'nun aslında yüksek talebi olup stoğu tükenmiş olabilir. Model bu gerçek sinyali geri kazanmak için stok ve gelen siparişleri dışsal regresör olarak kullanır.
+Temel mantık: **talep stok tarafından sansürlendiğinde (censored demand)** naif satış tahmini yanıltıcıdır — geçen ay sıfır satan bir SKU'nun aslında yüksek talebi olup stoğu tükenmiş olabilir. Model bu sinyali geri kazanmak için stok ve gelen siparişleri dışsal regresör olarak kullanır. Ayrıca **dead-SKU bypass** (son 12 ayda satışı olmayan SKU'lar) ve **TSB override** (yüksek sıfır oranlı serilerde TSB'yi MAE yarışını atlatarak doğrudan kazanan ilan eder) gibi hızlı yollar mevcuttur.
 
 ---
 
@@ -21,17 +21,18 @@ Tahmin sisteminin temel mantığı şu gözlemdir: **talep stok tarafından sans
 
 | Katman | Yığın |
 |---|---|
-| Dil | Python 3 (üretim scriptleri), Jupyter notebook (araştırma) |
-| Veri | `pandas`, `numpy` |
-| Klasik zaman serisi | `prophet`, `statsmodels` (`SARIMAX`, `ExponentialSmoothing`) |
-| ML modelleri | `scikit-learn` (`RandomForestRegressor`), `xgboost` (`XGBRegressor`) |
-| Kesintili talep | El yazımı `Croston`, `SBA` (Syntetos-Boylan), `TSB` |
-| Stacking | El yazımı NNLS — projeksiyon gradyanı ile (harici `scipy.optimize.nnls` bağımlılığı yok) |
-| Paralellik | `concurrent.futures.ProcessPoolExecutor` (CLI) / `ThreadPoolExecutor` (Jupyter fallback), `multiprocessing.get_context("spawn")` |
-| Grafikler | `matplotlib` |
-| Kalıcılık | Serileştirilmiş modeller için `joblib`, çıktılar için düz CSV + JSON |
+| Controller (REST API + iş kuyruğu + dispatcher) | Rust 1.95, `actix-web 4`, `sqlx`, `tokio`, `tracing` |
+| Worker (tahmin hesaplama servisi) | Python 3.11, `FastAPI`, `uvicorn`, `pydantic`, `structlog` |
+| Tahmin modelleri | `pandas`, `numpy`, `scikit-learn` (RF), `xgboost`, `prophet`, `statsmodels` (SARIMAX, ETS), el-yazımı NNLS + Croston/SBA/TSB |
+| Dashboard | React 18, TypeScript, Vite, TanStack Query/Table/Virtual, Recharts, Tailwind, Zustand, i18next |
+| Veritabanı | Postgres 16 (`forecast_runs`, `forecast_jobs`, `sales_panel`, `sku_config`, `sku_run_*`, `sku_active_pin`) |
+| Gözlem | Grafana (Postgres datasource, 4 dashboard: model-performance, portfolio-kpi, run-ops, stockout-calibration) |
+| Konteynerleştirme | Docker multi-stage (cargo-chef Rust, nginx-served Vite SPA), `docker-compose.yml` lokal geliştirme için |
+| Orkestrasyon | Kubernetes (k3s, Longhorn storage), nginx-ingress, cert-manager (`letsencrypt-prod`), CronJob ile gece otomatik eğitim |
+| Paketleme | Tek generic Helm chart (`deploy/helm/`), per-servis values override |
+| Build/Deploy araç akışı | `just` recipes (`justfile`), `deploy/scripts/{deploy,bootstrap}.sh` |
 
-Web framework yok, veritabanı yok, paket yöneticisi lock dosyası yok — saf script + notebook iş akışı.
+Lokal geliştirme için `docker-compose.yml` mevcut; üretim için `just deploy <service>` Helm chart üzerinden k8s'e push'lar.
 
 ---
 
@@ -39,270 +40,426 @@ Web framework yok, veritabanı yok, paket yöneticisi lock dosyası yok — saf 
 
 ```
 bitirme/
-├── proje_ozeti.md                      # Türkçe tez özeti (mevcut)
-├── CLAUDE.md                           # Claude Code için çalışma notları (kök dizinde olmalı)
-├── .claudeignore                       # Claude bağlamından büyük artefaktları hariç tutar
+├── CLAUDE.md                       # Claude Code için çalışma notları
+├── README.md
+├── docker-compose.yml              # Lokal geliştirme yığını (postgres + api + controller + grafana + adminer)
+├── docker-compose.test.yaml        # Test/CI yığını
+├── justfile                        # build/push/deploy/seed/bootstrap recipes
+├── pytest.ini
+├── requirements.txt
+│
 ├── docs/
-│   ├── PROJECT_OVERVIEW.md             # İngilizce mühendislik dokümanı
-│   ├── PROJECT_OVERVIEW_TR.md          # Bu dosya
-│   └── CLAUDE_TR.md                    # CLAUDE.md'in Türkçe çevirisi (referans)
+│   ├── PROJECT_OVERVIEW.md         # İngilizce mühendislik dokümanı
+│   ├── PROJECT_OVERVIEW_TR.md      # Bu dosya
+│   └── CLAUDE_TR.md
 │
-├── scripts/
-│   ├── __init__.py
-│   ├── model_v3.py     (1416 satır)    # BİRİNCİL üretim scripti — en güncel
-│   ├── model_v2.py     (1417 satır)    # v3'ün yakın ikizi, araştırma-ayarlı sabitler
-│   └── OMS.py          (1237 satır)    # Önceki bağımsız pipeline (prototip)
+├── controller/                     # Rust microservice — REST API + iş kuyruğu + worker dispatcher
+│   ├── Cargo.toml
+│   ├── migrations/                 # sqlx migration'ları (timestamp prefixed up/down çiftleri)
+│   │   ├── 20260420120000_init_enums.{up,down}.sql
+│   │   ├── 20260420120100_init_tables.{up,down}.sql
+│   │   ├── 20260420120200_init_indexes.{up,down}.sql
+│   │   ├── 20260512120000_sku_run_predictions.{up,down}.sql
+│   │   ├── 20260512200000_sku_active_pin.{up,down}.sql
+│   │   ├── 20260515120000_dead_sku_mode.{up,down}.sql
+│   │   └── 20260515130000_zero_y_variant.{up,down}.sql
+│   ├── src/
+│   │   ├── main.rs                 # CLI: serve, migrate, seed, monthly-run, backfill-cached-spec
+│   │   ├── server.rs               # actix-web rotaları
+│   │   ├── orchestrator.rs         # cold/warm/dead dispatch, drift check
+│   │   ├── queue.rs                # forecast_jobs claim/run/retry (FOR UPDATE SKIP LOCKED)
+│   │   ├── api.rs                  # WorkerClient — Python api'ye HTTP istemci
+│   │   ├── panel.rs                # CSV parser (sales_panel + sku_config seed)
+│   │   ├── cached_spec.rs          # warm path için kazanan model spec'i serialize/load
+│   │   ├── db.rs / types.rs / lib.rs
+│   │   └── ...
+│   └── tests/
 │
-├── Sales Forecast v7_full.ipynb        # En güncel araştırma notebook'u (v7, ~1.7 MB)
+├── services/worker/                # Python FastAPI tahmin servisi (model_v3.py'nin modülerize edilmiş hali)
+│   ├── main.py                     # uvicorn entrypoint (services.worker.main:app)
+│   ├── config.py                   # Tüm tunable'lar tek yerde (env override'lı)
+│   ├── logging.py
+│   ├── api/
+│   │   ├── app.py                  # FastAPI app instance
+│   │   └── routes/
+│   │       ├── forecast.py         # POST /forecast/cold, /forecast/warm
+│   │       ├── drift.py            # POST /drift/check
+│   │       └── health.py           # GET /healthz, /readyz
+│   ├── schemas/                    # pydantic request/response modelleri
+│   │   ├── requests.py
+│   │   └── responses.py
+│   ├── features/                   # calendar, lags, winsorize, pipeline
+│   ├── models/                     # exog_{ets,sarima,prophet,ml_rf,ml_xgb,carry_forward}, y_{rf,xgb}, intermittent, stacking
+│   ├── selection/                  # rocv, y_search, baselines, probe_escalate, hybrid
+│   ├── forecasting/                # exog, recursive, bootstrap, refit
+│   ├── oms/                        # stockout, policy (MOQ + lot yuvarlama)
+│   ├── pipelines/                  # cold.py, warm.py, drift.py — modülleri kompoze eder
+│   └── io/blobs.py                 # joblib save/load yardımcıları
 │
-├── panel_sales_orders_stock.csv        # Kanonik aylık panel girdisi
-├── sku_config.csv                      # SKU bazlı politika parametreleri
-├── motul_data.csv                      # Ham işlem bazlı satış verisi
-├── veri_matrisi_final_sales_orders_stock_calendar_lags_fx.csv  # Ara geniş matris
+├── dashboard/                      # React + Vite + TypeScript SPA
+│   ├── index.html
+│   ├── package.json
+│   ├── vite.config.ts
+│   ├── public/
+│   │   ├── sku_list.json           # build sırasında panel CSV'den üretilir
+│   │   ├── supplier_map.json
+│   │   └── mockServiceWorker.js
+│   ├── scripts/gen-sku-list.mjs    # prebuild
+│   └── src/
+│       ├── pages/                  # SkuDetailPage, RunDetailPage, SettingsPage
+│       ├── features/
+│       │   ├── run-control/        # RunTrigger, RunProgressBadge
+│       │   ├── run-detail/         # JobBreakdownTable
+│       │   ├── sku-detail/         # AnomalyFlagCard, BaselineComparisonCard, DemandHistoryChart,
+│       │   │                       # RunDeltaCard, RunPinControl, WhyThisNumberCard,
+│       │   │                       # ModelProvenancePanel, OrderBreakdownCard
+│       │   ├── sku-list/           # AbcMatrix, UrgencyLegend
+│       │   └── order-cart/         # CartView, cartStore
+│       ├── entities/{run,sku}/     # zod şemaları
+│       └── shared/{api,i18n,...}
 │
-├── serialized_models/
-│   └── best_y_model_rf_full.joblib     # Dondurulmuş deneysel RF (v3/v2 kullanmıyor)
+├── deploy/
+│   ├── docker/
+│   │   ├── Dockerfile.api          # python:3.11-slim, requirements + services/ + scripts/
+│   │   ├── Dockerfile.controller   # cargo-chef → debian:trixie-slim
+│   │   ├── Dockerfile.dashboard    # node:20 build → nginx:1.27-alpine serve
+│   │   └── nginx.dashboard.conf    # SPA fallback + cache headers
+│   ├── helm/                       # Tek generic chart, beş release
+│   │   ├── Chart.yaml
+│   │   ├── values.yaml             # default'lar
+│   │   ├── templates/
+│   │   │   ├── deployment.yaml
+│   │   │   ├── service.yaml
+│   │   │   ├── ingress.yaml        # nginx, cert-manager TLS
+│   │   │   ├── pvc.yaml            # opsiyonel
+│   │   │   ├── hpa.yaml            # opsiyonel
+│   │   │   ├── cronjob.yaml        # gece eğitimi
+│   │   │   ├── _helpers.tpl
+│   │   │   └── NOTES.txt
+│   │   └── values/
+│   │       ├── api.yaml            # PVC=10Gi, /healthz HTTP probe, ingress kapalı (internal)
+│   │       ├── controller.yaml     # cronjob: 0 2 * * * Europe/Istanbul, monthly-run --concurrency 4
+│   │       ├── dashboard.yaml      # ingress: / (Prefix)
+│   │       ├── postgres.yaml       # PVC=20Gi, pg_isready probe
+│   │       └── grafana.yaml        # fsGroup=472, sub-path ingress (/grafana)
+│   ├── scripts/
+│   │   ├── deploy.sh               # build → push → helm upgrade; working tree dirty ise tag'e -dirty<ts> ekler
+│   │   └── bootstrap.sh            # ns + postgres secret + regcred + grafana ConfigMap'ler
+│   ├── grafana/
+│   │   ├── dashboards/             # 4 .json (ConfigMap'lere bootstrap.sh basar)
+│   │   └── provisioning/{datasources,dashboards}/
+│   └── ofelia/config.ini           # docker-compose'da gece eğitimi için (k8s'de CronJob kullanılır)
 │
-├── outputs/
-│   └── {SKU}/                          # SKU başına tahmin artefaktları
-│       ├── preds_Full_*.csv            #   plot_*.png, reorder_recommendation.json,
-│       ├── preds_Full_*_REFIT.csv      #   test_summary_ALL*.csv, …
-│       ├── test_summary_ALL.csv
-│       ├── test_summary_ALL_REFIT.csv
-│       ├── reorder_recommendation.json
-│       ├── plot_full_*.png
-│       └── plot_3m_*.png
+├── scripts/                        # Tarihi / referans Python scriptleri (servis HTTP'den çağrılmıyor)
+│   ├── model_v3.py     (1416 satır)# Eski monolitik üretim scripti — services/worker'ın kaynağı
+│   ├── model_v2.py     (1417 satır)# v3'ün araştırma-ayarlı ikizi
+│   └── OMS.py          (1237 satır)# Probe/Escalate'siz prototip
 │
-├── v7_full/
-│   ├── forecasts/                      # v7 notebook çıktıları (düz format)
-│   └── plots/
+├── opt/                            # Tek-konu deneme scriptleri (ablation, bootstrap, ETS, PI calibration, SARIMA)
+│   ├── ablation_playground.py
+│   ├── bootstrap_playground.py
+│   ├── ets_playground.py
+│   ├── model_comparison_playground.py
+│   ├── pi_calibration_playground.py
+│   ├── sarima_playground.py
+│   └── OPT.md
 │
-├── mnt/data/                           # Colab/bulut bağlama aynaları
-│   ├── panel_sales_orders_stock.csv
-│   ├── sku_config.csv
-│   ├── v7_per_sku_outputs/
-│   └── v7_select/
+├── notebooks/                      # Yeni EDA / processing notebook'ları
+│   ├── v1_eda.ipynb
+│   ├── v1_processing.ipynb
+│   ├── sku_types_after_fix.png
+│   └── archive/                    # Faz 1–4 notebook'ları
 │
-├── logs/
-├── .idea/                              # JetBrains (yok say)
-├── __MACOSX/                           # macOS zip artığı (yok say)
-└── Archive.zip                         # (yok say)
+├── Sales Forecast v7_full.ipynb    # Faz 5 araştırma notebook'u (~1.7 MB)
+├── motul_data_analysis.ipynb
+│
+├── panel_sales_orders_stock.csv    # Kanonik aylık panel — image'a /app/ altında baked
+├── sku_config.csv                  # SKU bazlı politika — image'a /app/ altında baked
+├── veri_matrisi_final_sales_orders_stock_calendar_lags_fx.csv
+├── pipeline_exporter.py            # outputs/ klasöründen pipeline_results.json üretir (offline export)
+├── pipeline_results.json           # Bahsedilen export (servisler tüketmiyor; statik demo modu için rezerv)
+└── tests/                          # pytest — parity_compare.py + birim testler
 ```
 
-**Kök dizinde düzinelerce arşiv Jupyter notebook** (Faz 1–4; bkz. §5) bulunmaktadır. Tek bir SKU deneyinden (`303-104092`) başlayarak dışsal topluluk keşfi, NNLS karıştırma, çoklu-SKU paralelleştirme, REFIT rollback ve kesintili talep işleme evrimini belgeliyorlar. Artık `scripts/model_v3.py` + `Sales Forecast v7_full.ipynb` tarafından yerine geçilmişlerdir ve context penceresini temiz tutmak için `.claudeignore` ile hariç tutulurlar.
+**Repo kökünde `outputs/`, `serialized_models/`, `v7_full/`, `mnt/`, `motul_data.csv` `.gitignore`'lı**. CI/build kapsamında değiller; üretim runtime'ı tüm state'i Postgres'te tutar.
 
 ---
 
-## 4. Birincil Modül: `scripts/model_v3.py`
+## 4. Servis Topolojisi
 
-`scripts/model_v3.py` kanonik üretim giriş noktasıdır. `python scripts/model_v3.py` ile çalıştırıldığında `panel_sales_orders_stock.csv`'deki her SKU için tahmin + sipariş önerisi üretir.
-
-### 4.1 Üst seviye yerleşim
-
-| Satırlar | Bölüm |
-|---|---|
-| 1–155 | Modül docstring, import'lar, global yapılandırma sabitleri |
-| 160–237 | Yardımcı araçlar (`ensure_ms_freq`, `add_calendar`, `build_lags_y`, `prep_features_y`, metrik yardımcıları) |
-| 239–268 | Baseline tahminciler (`seasonal_naive_forecast`, `ma3_forecast`, `baseline_val_mae`) |
-| 270–476 | EXOG model katmanı (Prophet / SARIMA / ETS fit & forecast; `build_exog_univar`, `build_exog_inverse`, `build_exog_ml`) |
-| 477–584 | NNLS stacking (`project_simplex`, `nnls_ridge`, `nnls_ridge_weighted`, `nnls_adapt`, `fit_nnls_weights_on_val`) |
-| 586–658 | Kesintili talep (`select_intermittent`, `croston_forecast`, `sba_forecast`, `tsb_forecast`, `predict_intermittent`) |
-| 660–706 | Y-model ROCV (`rolling_origin_splits`, `optimize_rf_rocv`, `optimize_xgb_rocv`) |
-| 708–728 | `recursive_forward_predict_y` — özyinelemeli Y tahmin döngüsü |
-| 730–803 | Bootstrap PI + stockout + MOQ yuvarlama (`add_bootstrap_intervals`, `stockout_probability`, `cum_demand_quantile`, `round_moq_lot`) |
-| 805–835 | Y-ensemble ağırlıkları + REFIT (`y_ensemble_weights`, `refit_models_on_full`) |
-| 838–960 | Değişken bazlı EXOG seçimi — `choose_best_exog_per_var`, `build_hybrid_exog` (⚠ ölü refactoring enkazı içerir; bkz §8) |
-| 963–979 | `choose_methods_for_sku` (tanımlı ama kullanılmıyor; ölü kod) |
-| 982–1312 | **`run_for_sku`** — SKU başına ana orkestratör |
-| 1314–1335 | `load_params` |
-| 1338–1344 | `_run_worker` — paralel sarıcı |
-| 1347–1412 | **`main`** — panel yükleme, SKU groupby, dispatch, özet |
-
-### 4.2 SKU başına pipeline (`run_for_sku`)
+Beş release tek namespace'te (`bitirme`):
 
 ```
- 1. Veri hazırlığı       ensure_ms_freq, prep_features_y      (lag'ler, takvim, winsorize)
- 2. Y model ROCV         optimize_rf_rocv, optimize_xgb_rocv  (3-fold rolling-origin CV)
- 3. VAL üzerinde Probe   _build_exog_by_method                (ucuz adaylar: ETS, Intermittent, ML-Exog RF)
- 4. Gerekirse Escalate   baseline_val_mae kontrolü            (probe < seasonal naive + %2 ise XGB + Prophet eklenir)
- 5. Değişken bazlı hibrit choose_best_exog_per_var            (`orders` için en iyi yöntem ⨯ `stock` için en iyi)
- 6. Test EXOG oluştur    build_exog_*                         (TEST_END / TEST_END_SHORT'a ileri yansıtma)
- 7. TEST değerl. (PRE)   recursive_forward_predict_y,         (özyinelemeli tahmin + Laplace bootstrap PI +
-                         add_bootstrap_intervals,              stoksuz kalma olasılığı + E[T])
-                         stockout_probability
- 8. REFIT                refit_models_on_full                 (train+val üzerinde yeniden eğit; kötüyse rollback)
- 9. OMS sipariş poltk.   stockout_probability,                (order = max(0, cumDemand(H, q) - startStock),
-                         cum_demand_quantile, round_moq_lot    MOQ + lot'a yuvarlanır)
-10. Çıktı                varyant başına CSV, reorder JSON     (outputs/{SKU}/ altına yazar)
+                            ┌─────────────────────────────────────────────┐
+                            │           https://bitirme.umceko.com        │
+                            │            (nginx-ingress + TLS)             │
+                            └────┬───────────┬────────────────────┬───────┘
+                                 │ /         │ /api               │ /grafana
+                                 ▼           ▼                    ▼
+                         ┌──────────┐  ┌────────────┐      ┌─────────────┐
+                         │ dashboard│  │ controller │      │   grafana   │
+                         │ (nginx + │  │ (Rust /    │      │ (Postgres   │
+                         │  Vite)   │  │  actix:80) │      │  datasource)│
+                         └──────────┘  └─────┬──────┘      └──────┬──────┘
+                                             │                    │
+                                  HTTP (cluster DNS)              │
+                                             │                    │
+                                             ▼                    │
+                                      ┌─────────────┐             │
+                                      │     api     │             │
+                                      │ (FastAPI    │             │
+                                      │  :80)       │             │
+                                      └─────┬───────┘             │
+                                            │                     │
+                                            │ joblib PVC          │
+                                            │ (/app/models)       │
+                                            ▼                     │
+                                      ┌─────────────┐             │
+                                      │  Longhorn   │             │
+                                      │  RWO 10Gi   │             │
+                                      └─────────────┘             │
+                                                                  │
+                                          ┌─────────────┐         │
+                                          │  postgres   │◄────────┘
+                                          │ (RWO 20Gi)  │
+                                          └─────────────┘
+                                                  ▲
+                                                  │
+                                          ┌───────┴────────┐
+                                          │ controller-cron│  (gece 02:00 Europe/Istanbul,
+                                          │  CronJob       │   `controller monthly-run`)
+                                          └────────────────┘
 ```
 
-### 4.3 Paralellik
+**Sorumluluk dağılımı:**
 
-Çift modlu çalıştırma:
-
-- **CLI (`python scripts/model_v3.py`)** — `ProcessPoolExecutor(mp.get_context("spawn"))`, worker başına bir SKU, `MAX_WORKERS = int(cpu_count * 0.75)`.
-- **Jupyter / interaktif** — `IS_INTERACTIVE` bayrağı ile tespit, `ThreadPoolExecutor`'a düşer (spawn notebook yeniden yüklemelerinde hayatta kalmıyor).
-- v3'te `PARALLEL_SKU = False` varsayılan (v2/OMS'de açık) — en güncel iterasyon varsayılan olarak seri çalışır, paralellik açıkça devreye alınır.
+- **`api`** — saf hesap: panel slice'ını + cached spec'ini gövdede alır, tahmin döndürür. State yok (PVC sadece joblib blob'ları için). Endpoint'ler: `POST /forecast/cold`, `POST /forecast/warm`, `POST /drift/check`, `GET /healthz`, `GET /readyz`.
+- **`controller`** — Postgres'in tek yazarı + iş orkestratörü. Run/job tablolarını yönetir, drift'e göre cold/warm kararı verir, api'ye HTTP gönderir, sonuçları persist eder. Endpoint'ler: `POST /runs` (subset SKU filtresi), `GET /runs/{id}`, `GET /runs`, `GET /runs/{id}/jobs`, `GET /runs/{id}/skus/{sku}`, `POST /skus/{sku}/forecast` (tek-SKU), `GET /skus`, `GET /skus/{sku}/{latest,history,timeseries,predictions}`, `GET|POST|DELETE /skus/{sku}/pin`.
+- **`dashboard`** — TypeScript SPA, nginx altında static serve. Controller'ı `/api` üzerinden, Grafana'yı `/grafana` üzerinden iframe ile tüketir.
+- **`postgres`** — tüm üretim state'i: panel, config, runs, jobs, predictions, pin'ler.
+- **`grafana`** — Postgres datasource, 4 önceden hazırlanmış dashboard. ConfigMap'lerle provisioning (`bootstrap.sh` `deploy/grafana/` içeriğini her güncellemede senkronize eder).
+- **`controller-cron`** — CronJob (`0 2 * * *`, Europe/Istanbul, `Forbid` overlap, 4h hard cap). Her gece `controller monthly-run --concurrency 4` yürütür: tüm SKU'ları queue'ya basar, worker'lar drift'e göre cold/warm yapar.
 
 ---
 
-## 5. Notebook Evrimi (Faz 1–5)
+## 5. SKU Başına Pipeline (`services/worker/pipelines/`)
 
-| Faz | Tema | Temsili notebook'lar |
+Üç ana yol var; controller hangisinin tetikleneceğine karar verir (`orchestrator.rs`):
+
+| Path | Tetiklendiği zaman | Tipik süre (concurrency=4) |
 |---|---|---|
-| 1 | Tek SKU EDA + baseline (`303-104092`) | `motul_data_analysis.ipynb`, `veri hazırlama.ipynb`, `303-104092-3-Model.ipynb`, `303-104092-Probhet-XGBoost-Hybrid*.ipynb` |
-| 2 | Dışsal topluluk keşfi | `Auto-Exog Forecast*.ipynb`, `3 Exog Strategy*.ipynb`, `Exog Ensemble Tuning + Sızıntısız-Kausal + PI.ipynb` |
-| 3 | OMS entegrasyonu + senaryolar | `Sales Forecast v2–v6.1 — OMS Edition*.ipynb` |
-| 4 | Çoklu-SKU paralelleştirme + REFIT + kesintili | `Sales Forecast V6_multi_sku*.ipynb`, `v6_multi_sku.py — OMS Edition*.ipynb` |
-| 5 | **Güncel** — v7 tam üretim çalıştırması | `Sales Forecast v7_full.ipynb` (en son) |
+| **dead bypass** | Son `DEAD_SKU_WINDOW_MO` (varsayılan 12) ay içinde satış yok | **<1 saniye** |
+| **warm** | Önceki başarılı run var, drift kontrolünden geçti | **~12 saniye** |
+| **cold** | İlk run veya drift tespit edildi | **~3-5 dakika** (batched) |
 
-Faz 1–4 arşivsel. Canlı artefaktlar: `scripts/model_v3.py`, `scripts/OMS.py` ve `Sales Forecast v7_full.ipynb`.
+### 5.1 Cold (`pipelines/cold.py` — `run_cold`)
+
+```
+ 1. Veri hazırlığı       prep_features_y                       (lag'ler, takvim, winsorize)
+ 2. Dead SKU kontrolü    cutoff = test_start - DEAD_SKU_WINDOW (sıfırsa zero forecast döner, mode="dead_sku")
+ 3. Y model ROCV         optimize_rf_rocv, optimize_xgb_rocv   (3-fold rolling-origin CV)
+ 4. VAL üzerinde Probe   _build_exog_by_method                 (ETS, Intermittent, ML-Exog RF, Carry-Forward)
+ 5. Gerekirse Escalate   baseline_val_mae kontrolü             (probe < seasonal_naive + DELTA ise +XGB +Prophet)
+ 6. Değişken bazlı hibrit choose_best_exog_per_var             (orders ⨯ stock için en iyiler bağımsız)
+ 7. TSB override         zero_ratio kontrolü                   (yüksek sıfır oranlı serilerde TSB MAE yarışını atlatır)
+ 8. Test EXOG oluştur    build_exog_*                          (TEST_END / TEST_END_SHORT'a ileri yansıtma)
+ 9. TEST değerl. (PRE)   recursive_forward_predict_y,          (özyinelemeli tahmin + Laplace bootstrap PI +
+                         add_bootstrap_intervals,               stoksuz kalma olasılığı + E[T])
+                         stockout_probability + bias correction
+10. REFIT                refit_models_on_full                  (train+val üzerinde yeniden eğit; kötüyse rollback)
+11. OMS sipariş poltk.   stockout_probability,                 (order = max(0, cumDemand(H, q) - startStock),
+                         cum_demand_quantile, round_moq_lot     MOQ + lot'a yuvarlanır)
+12. Persist              controller insert sku_runs +          (combinations, exog_selection, models,
+                         sku_run_{combinations,...}             predictions, recommendation, val_residuals)
+                         + cached_spec blob (warm için)
+```
+
+### 5.2 Warm (`pipelines/warm.py` — `run_warm`)
+
+ROCV / probe / escalate / choose_best_exog_per_var ADIMLARI **atlanır**. Cached spec'ten gelen kazanan Y-model ailesi + hyperparam'lar ile genişletilmiş train+val penceresinde **sadece final modeli yeniden eğitir**, sonra tahmin eder. Mode: `warm_with_refit`. Sonuç: 12 saniye vs cold'un 15 dakikası.
+
+Drift kontrolü warm'un önündedir (`controller/src/orchestrator.rs`): VAL üzerinde yeni MAE cached MAE'den `DRIFT_EPS` (varsayılan %20) kötüyse → cold fallback.
+
+### 5.3 Dead SKU (`pipelines/cold.py` — `_zero_result`)
+
+Pipeline'a girmeden döner: tahmin sıfır, PI sıfır, öneri yok, mode="dead_sku". 360 SKU'luk panelimizde ~%23 (84 SKU) bu yola düşüyor.
 
 ---
 
 ## 6. Veri Şemaları
 
-### `panel_sales_orders_stock.csv`
+### `panel_sales_orders_stock.csv` → Postgres `sales_panel`
 
 | Sütun | Tip | Açıklama |
 |---|---|---|
 | `ds` | date | Ayın ilk günü timestamp (MS frekansı) |
-| `sku` | string | Ürün kodu (örn. `303-104092`) |
+| `sku` | string | Ürün kodu (örn. `303-104092`, `IHR-780-AFL110AUV`) |
 | `y` | float | Gerçekleşen aylık satış (adet) |
 | `orders` | float | O ayda verilen gelen satın alma siparişleri |
 | `stock` | int | Ay sonu eldeki stok |
 
-### `sku_config.csv`
+PK: `(sku, ds)`. Upsert semantik (`ON CONFLICT DO UPDATE`). Şu an ~350 SKU × 70 ay = ~25k satır.
+
+### `sku_config.csv` → Postgres `sku_config`
 
 | Sütun | Açıklama |
 |---|---|
-| `sku` | Ürün kodu |
+| `sku` | Ürün kodu (PK) |
 | `T_CHECK` | Ay bazında inceleme döngüsü; `E[T_stockout] ≤ T_CHECK` ise sipariş tetiklenir |
 | `H_COVER` | Kapsam ufku — siparişin kaç aylık talebi karşılayacağı |
-| `q_target` | Kümülatif talep üzerinde servis seviyesi kuantili (örn. 0.5 = medyan) |
-| `lead_time_mo` | Ay cinsinden tedarikçi teslim süresi |
+| `Q` | Kümülatif talep üzerinde servis seviyesi kuantili (örn. 0.5 = medyan) |
 | `MOQ` | Minimum sipariş miktarı (0 = minimum yok) |
-| `lot_size` | Yuvarlama granülarisi (1 = birim, aksi halde en yakın lot'a yukarı yuvarla) |
+| `LOT_SIZE` | Yuvarlama granülarisi (1 = birim, aksi halde en yakın lot'a yukarı yuvarla) |
+| `STARTING_STOCK_OVERRIDE` | 0 değilse `sales_panel.stock`'tan gelen son değeri override eder (manuel sayım sonrası) |
 
-### `outputs/{SKU}/` artefakt isimlendirme
+### Postgres tabloları (özet)
 
-`preds_{Horizon}_{EnsembleMethod}_{YVariant}[_REFIT].csv`
+| Tablo | Rolü |
+|---|---|
+| `forecast_runs` | Run başına bir satır: `run_id`, `pipeline_version`, `config_json`, `status`, `started_at`, `completed_at`, `data_version_hash` |
+| `forecast_jobs` | Run × SKU işleri: `status` (queued/claimed/completed/failed), `attempts`, claim için `FOR UPDATE SKIP LOCKED` |
+| `sku_runs` | SKU × run terminal sonucu: mode, kazanan y_variant + phase (PRE/REFIT), mae, rmse, recommendation özeti |
+| `sku_run_combinations` | Test edilen tüm (exog × y_variant × phase) kombinasyonları, kazanan tespiti için |
+| `sku_run_exog_selection` | Değişken bazlı (`orders`, `stock`) seçilen EXOG yöntemi + skor |
+| `sku_run_models` | Eğitilen modellerin hyperparam'ları + blob URI'si (warm için) |
+| `sku_run_predictions` | Tahmin trayektorisi (her `ds` için yhat + PI sütunları) |
+| `sku_run_recommendation` | Sipariş önerisi: `starting_stock`, `cum_demand_q`, `order_qty_{raw,rounded}`, `p_stockout_{3,6}m`, `e_t_stockout_mo` |
+| `sku_run_val_residuals` | VAL penceresinde rezidüeller, drift karşılaştırması için |
+| `sku_active_pin` | Dashboard'dan pin'lenen run'lar — "latest" çağrılarında bu run dönülür |
 
-- **Horizon** — `Full` (6 aylık pencere) veya `Short3` (3 aylık pencere, grafik isimlerinde `3m` olarak da görülür)
-- **EnsembleMethod** — EXOG regresörlerinin ileri nasıl tahmin edildiği. Örnekler: `Adaptive5-NNLS-w3` (5 temel model × 3-dönemlik pencere üzerinde NNLS ağırlıkları), `Top3-NNLS-Ridge`, `All-5-INV` (inverse-MAE), `Ensemble` (basit ortalama), `ML-Exog_XGB`, `Prophet`, `SARIMA`, `ETS`, `Intermittent` (Croston/SBA/TSB)
-- **YVariant** — özyinelemeli tahmin için kullanılan Y-modeli: `RF`, `XGB` veya `Y-ENS` (RF + XGB'nin NNLS karışımı)
-- **`_REFIT` son eki** — modeller train + val üzerinde yeniden eğitildikten sonraki tahminler (PRE-REFIT sonucundan kötü değilse korunur)
-
-Tahmin CSV sütunları: `ds, yhat, pi80_lo, pi80_hi, pi95_lo, pi95_hi`.
-
-`reorder_recommendation.json` — SKU başına terminal çıktı. Seçilen kombinasyonu, başlangıç stoğunu, `P(stockout ≤ 3m)`, `P(stockout ≤ 6m)`, `E[T_stockout]`, kümülatif talep kuantilini ve final `order_qty_rounded` değerini içerir.
+Migration'lar `controller/migrations/`; controller `serve` veya `migrate` subcommand'iyle açıldığında otomatik uygular.
 
 ---
 
-## 7. Mimari Diyagram (Veri Akışı)
+## 7. Veri Akışı
 
 ```
-                     ┌────────────────────┐
-                     │   motul_data.csv   │  (ham işlemler)
-                     └─────────┬──────────┘
-                               │ veri hazırlama.ipynb
-                               ▼
-                ┌──────────────────────────────┐
-                │ panel_sales_orders_stock.csv │  (temizlenmiş aylık panel)
-                └──────────────┬───────────────┘
-                               │
-                               ▼
-   ┌──────────────────────────────────────────────────────────┐
-   │              scripts/model_v3.py :: main                 │
-   │                                                          │
-   │   her SKU için (paralel opsiyonel):                      │
-   │       run_for_sku(sku_df, sku_params)                    │
-   │           │                                              │
-   │           ├── prep_features_y           (lag, takvim)    │
-   │           │                                              │
-   │           ├── optimize_rf_rocv  ──┐                      │
-   │           ├── optimize_xgb_rocv ──┴── ROCV grid search   │
-   │           │                                              │
-   │           ├── EXOG probe (ETS, IM, ML-Exog-RF)           │
-   │           │      └── escalate → zayıfsa +XGB +Prophet    │
-   │           │                                              │
-   │           ├── choose_best_exog_per_var   (orders, stock) │
-   │           │                                              │
-   │           ├── build_hybrid_exog                          │
-   │           │                                              │
-   │           ├── recursive_forward_predict_y                │
-   │           │      └── add_bootstrap_intervals (Laplace)   │
-   │           │                                              │
-   │           ├── refit_models_on_full  (+ rollback)         │
-   │           │                                              │
-   │           ├── stockout_probability, cum_demand_quantile  │
-   │           │                                              │
-   │           └── round_moq_lot  → reorder_recommendation    │
-   └───────────────────────────┬──────────────────────────────┘
-                               │
-                               ▼
-            ┌──────────────────────────────────┐
-            │          outputs/{SKU}/          │
-            │                                  │
-            │  preds_*.csv  (PI sütunları ile) │
-            │  preds_*_REFIT.csv               │
-            │  test_summary_ALL.csv            │
-            │  test_summary_ALL_REFIT.csv      │
-            │  reorder_recommendation.json     │
-            │  plot_full_*.png, plot_3m_*.png  │
-            └──────────────────────────────────┘
-                               │
-                               ▼
-                ┌──────────────────────────┐
-                │ outputs/_SUMMARY/        │
-                │  test_summary_ALL_SKUs.csv│
-                └──────────────────────────┘
+       ┌──────────────────────────┐
+       │  Ham veri (CSV drop)     │
+       │  panel/config/attributes │
+       └──────────┬───────────────┘
+                  │  kubectl cp + controller seed
+                  ▼
+       ┌─────────────────────────┐         ┌────────────────────────┐
+       │   postgres.sales_panel  │◄────────│ controller-cron        │
+       │   postgres.sku_config   │         │ (gece 02:00 Istanbul,  │
+       └──────────┬──────────────┘         │  monthly-run)          │
+                  │                        └────────────────────────┘
+                  │  (controller okur)
+                  ▼
+       ┌─────────────────────────────────┐
+       │  controller `monthly-run`       │
+       │  veya `POST /runs` (subset)     │
+       │  veya `POST /skus/{sku}/forecast│
+       │                                  │
+       │  INSERT forecast_runs            │
+       │  INSERT forecast_jobs (per SKU)  │
+       │  tokio worker'lar claim eder     │
+       │  → drift check → cold or warm    │
+       └──────────┬──────────────────────┘
+                  │  HTTP /forecast/{cold,warm}
+                  ▼
+       ┌─────────────────────────────────┐
+       │  api (FastAPI worker)            │
+       │  services/worker/pipelines/      │
+       │  → cold.run_cold / warm.run_warm │
+       │  → ForecastResult JSON döner     │
+       └──────────┬──────────────────────┘
+                  │  HTTP response
+                  ▼
+       ┌─────────────────────────────────┐
+       │  controller persist             │
+       │  sku_runs, predictions,         │
+       │  recommendation, val_residuals  │
+       │  cached_spec blob (PVC)         │
+       └──────────┬──────────────────────┘
+                  │
+        ┌─────────┴───────────┐
+        ▼                     ▼
+  ┌──────────┐         ┌──────────┐
+  │dashboard │         │ grafana  │
+  │GET /api/ │         │ Postgres │
+  │skus/...  │         │ panels   │
+  └──────────┘         └──────────┘
 ```
 
 ---
 
-## 8. Desenler, Anti-desenler, Notlar
+## 8. Yük taşıyan kararlar + anti-pattern'lar
 
 **Yük taşıyan tasarım kararları:**
-- **Özyinelemeli Y tahmini.** Doğrudan çoklu-adım (bir kerede T+6) yerine, `recursive_forward_predict_y` her T+1 tahminini T+2 için lag feature'larına geri besler. Zaman serisi semantiğine daha sadık ama ilk adım yanlışsa hata birikir.
-- **`time_decay` ile NNLS topluluk ağırlıkları.** Yakın doğrulama hataları uzak olanlardan daha fazla sayılır. `fit_nnls_weights_recent` son `REFIT_TAIL_K` ay üzerinde çalışır.
-- **Değişken bazlı EXOG seçimi.** `orders` ve `stock` bağımsız tahmin edilir — orders için en iyi yöntem ailesi stock için en iyi olandan farklı olabilir; naif birleştirme bunu gizler.
-- **Probe → Escalate.** Önce ucuz EXOG yöntemleri çalışır; ağır yöntemler (Prophet, XGB-Exog) sadece ucuz yöntemler `seasonal_naive + DELTA_BETTER_THAN_BASELINE` eşiğini geçemezse devreye girer. Hız optimizasyonu, kalite fedakarlığı değil.
-- **Kesintili kapısı.** Yüksek sıfır oranlı / yüksek ADI SKU'lar sürekli modeller yerine Croston/SBA/TSB'ye geçer. `select_intermittent` içinde sıfır-oranı + ADI eşikleriyle tetiklenir.
-- **Bootstrap PI > parametrik CI.** `add_bootstrap_intervals` tek bir nokta tahmini yerine stoksuz kalma olasılığı hesaplamasını besleyen kalibre edilmiş %80/%95 aralıkları üretir.
-- **REFIT + rollback.** İlk eğitim/değerlendirme ayrımından sonra modeller train + val üzerinde yeniden eğitilir. Refit sonucu pre-refit sonucundan (test penceresi üzerinde ölçülerek) *daha kötüyse*, pre-refit sonucu saklanır. Yakın dönem gürültüye overfit etmeyi önler.
+
+- **Özyinelemeli Y tahmini** (`forecasting/recursive.py`). Doğrudan çoklu-adım (bir kerede T+6) yerine T+1'i T+2'nin lag feature'larına geri besler. Zaman serisi semantiğine sadık ama ilk adım yanlışsa hata birikir.
+- **NNLS topluluk ağırlıkları + simplex projeksiyonu** (`models/stacking.py`). `time_decay` ile yakın doğrulama hataları uzak olanlardan daha fazla sayılır. Harici `scipy.optimize.nnls` bağımlılığı yok — el yazımı projeksiyon gradyanı.
+- **Değişken bazlı EXOG seçimi** (`selection/hybrid.py`). `orders` ve `stock` bağımsız tahmin edilir — orders için en iyi yöntem stock için en iyi olmayabilir; naif birleştirme bunu gizler.
+- **Probe → Escalate**. Önce ucuz EXOG yöntemleri (ETS, IM, ML-Exog-RF, Carry-Forward); ağır yöntemler (Prophet, XGB-Exog) sadece ucuzlar `seasonal_naive + DELTA_BETTER_THAN_BASELINE` eşiğini geçemezse devreye girer.
+- **Dead SKU bypass + TSB override + zero_y_variant** (opt-branch'ten). Pipeline'a giren her SKU'nun cold yola gitmesi gerekmiyor — sıfır oranı yüksek serilerde TSB doğrudan kazanan ilan edilir, son 12 ayda satışı olmayanlar sıfır tahmin ile döner. Tipik portföyde %20-25'lik bir hız kazancı.
+- **Bootstrap PI > parametrik CI**. `forecasting/bootstrap.py` tek bir nokta tahmini yerine kalibre %80/%95 aralıkları üretir; stoksuz kalma olasılığı tüm dağılım üzerinden integre edilir.
+- **REFIT + rollback**. İlk eğitim/değerlendirme ayrımından sonra modeller train + val üzerinde yeniden eğitilir. Refit sonucu pre-refit'ten *kötüyse*, pre-refit saklanır. Yakın dönem gürültüye overfit etmeyi önler. (Load-bearing invariant; `pipelines/cold.py`'de kıyas yönünü ters çevirmek bug üretir.)
+- **Drift gate'i warm önünde**. Cached spec varsa otomatik warm değil — VAL üzerinde yeni MAE cached MAE'den %20 (DRIFT_EPS) kötü gelirse cold fallback. Stale model riskini sınırlar.
+- **Working tree dirty ise image tag'e `-dirty<unix_ts>` ekle** (`deploy/scripts/deploy.sh`). Aksi halde aynı git SHA tag'iyle iki farklı içerik push'larsanız k8s `IfNotPresent` ile eski image'i cache'leyebilir.
 
 **Bilinen kod-sağlık sorunları (refaktör etmeden önce araştır):**
-- ⚠ `val_mae_exog_for_col` `scripts/model_v3.py` içinde **iki kez tanımlı** (satır 899 ve 909). İlki gölgelenmiş ve ölü. Satır 848–897 arasında önceki 5 bozuk refactoring denemesi (`_val_mae_exog_col`, `_val_mae_col_clean`, …) ölü kod olarak bırakılmış. Sadece satır 909'daki son tanım doğru çalışıyor, ama bu blok dosyadaki ana okunabilirlik tehlikesi.
-- ⚠ `choose_methods_for_sku` (satır 964) asla çağrılmıyor — `run_for_sku` mantığı inline olarak içerir.
-- ⚠ `scripts/model_v2.py` ve `scripts/model_v3.py` neredeyse ikiz — sadece ~10 config sabitinde farklılar (`B_BOOT`, `ADAPT_WINS`, `ENABLE_TIME_DECAY_NNLS`, `IM_METHODS`, `FAST_MODE`, `PARALLEL_SKU`). v3, v2'nin hız-budanmış varyantı. Herhangi bir mantık düzeltmesi her iki dosyaya elle uygulanmalı.
-- ⚠ `scripts/OMS.py`'deki `ENABLE_INV_ENSEMBLES` / `ENABLE_NNLS_ENSEMBLES` bayrakları (varsayılan False) sadece dosya çıktısını kontrol eder, hesaplamayı değil — 846–876 satırlarındaki adaptif NNLS bloğu koşulsuz çalışır, CPU'yu boşa harcar.
-- ⚠ Faz 1–4'ten gelen Jupyter notebook'lar (düzinelerce dosya) repo kökünde commit edilmiş ve çok üst üste — gelecekteki bir temizlik geçişinde `archive/` alt klasörüne arşivlemeyi düşün.
+
+- ⚠ `val_mae_exog_for_col` `scripts/model_v3.py` içinde hâlâ **iki kez tanımlı** (satır 988 ve 998). İlki ölü kod. v3 artık üretim değil ama tarihi referans olarak burada — `services/worker/selection/hybrid.py:val_mae_exog_for_col` temiz versiyondur.
+- ⚠ `scripts/model_v2.py` ve `scripts/model_v3.py` — eski monolit ikizler. Üretim mantığı `services/worker/` altına taşındı, bu iki dosya artık çağrılmıyor.
+- ⚠ `scripts/OMS.py` — Probe/Escalate'siz prototip. Karşılaştırma için saklanıyor.
+- ⚠ `controller/src/server.rs` REST endpoint'leri `actix-web` çoklu worker'la (`workers: 2`) çalışıyor. Yoğun yazma esnasında `GET /runs/{id}` farklı sqlx connection snapshot'ları döndürebiliyor (`completed`/`queued` count'ları kısa süreliğine inkonsistent). Cosmetic — pipeline'ı etkilemez ama dashboard polling'i kararsız görünebilir.
+- ⚠ `controller` ve `api` image'larına `panel_sales_orders_stock.csv` + `sku_config.csv` baked. Veri güncellemesi için ya rebuild gerekir ya da `kubectl cp + controller seed` (önerilen yol — kodu kirletmez).
+- ⚠ `pipeline_results.json` repo kökünde — şu an hiçbir servis tüketmiyor, statik demo modu için rezerv (dashboard'ın `VITE_USE_STATIC_SOURCE` flag'i ile).
+- ⚠ Faz 1–4 notebook'ları `notebooks/archive/` altına taşındı, kök daha temiz. `.claudeignore` hâlâ büyük arşivleri context'ten dışlar.
 
 ---
 
 ## 9. Giriş Noktaları Özeti
 
-| Amaç | Dosya | Komut |
-|---|---|---|
-| Tüm SKU'lar için pipeline'ı çalıştır | `scripts/model_v3.py` | `python scripts/model_v3.py` |
-| Referans uygulama (Probe/Escalate'siz) | `scripts/OMS.py` | `python scripts/OMS.py` |
-| Araştırma / tez anlatımı | `Sales Forecast v7_full.ipynb` | Jupyter'da aç |
-| Paneli ham veriden yeniden oluştur | `veri hazırlama.ipynb` | Jupyter'da aç |
+| Amaç | Komut |
+|---|---|
+| Lokal geliştirme yığını | `docker compose up -d` (postgres + api + controller + grafana + adminer) |
+| Lokal seed | `bash deploy/seed.sh` (compose içindeki controller'a `seed` çağırır) |
+| k8s namespace + secret + grafana CMs | `just bootstrap` |
+| Bir servisi build + push + deploy | `just deploy <api\|controller\|dashboard\|postgres\|grafana>` |
+| Tüm servisleri sırayla deploy | `just deploy-all` |
+| Lokal docker login (registry için) | `just login` |
+| Postgres'i panel + config ile seed | `just seed` (kubectl cp + controller seed çalıştırır) |
+| Tek SKU ad-hoc çalıştır | `curl -X POST https://bitirme.umceko.com/api/skus/{sku}/forecast` |
+| Tüm portföy çalıştır | `curl -X POST https://bitirme.umceko.com/api/runs` |
+| Alt-küme çalıştır | `curl -X POST https://bitirme.umceko.com/api/runs -d '{"skus":["A","B"]}'` |
+| Sonuç çek | `GET https://bitirme.umceko.com/api/skus/{sku}/latest` |
+| Pod log'u takip et | `just logs <service>` |
+| Pod shell | `just shell <service>` |
+| Helm release listesi | `just list` |
+| Tarihi monolit (referans) | `python scripts/model_v3.py` |
+| Araştırma notebook'u | `Sales Forecast v7_full.ipynb`, `notebooks/v1_eda.ipynb` |
+| Paneli ham veriden yeniden oluştur | `notebooks/v1_processing.ipynb` |
 
 ---
 
 ## 10. Kodu Nereden Okumaya Başlamalı
 
-Önem sırasıyla:
+Servis tarafı (üretim):
 
-1. `scripts/model_v3.py:983` — `run_for_sku` (ana pipeline)
-2. `scripts/model_v3.py:709` — `recursive_forward_predict_y` (Y tahmin döngüsü)
-3. `scripts/model_v3.py:731` — `add_bootstrap_intervals` (PI oluşturma)
-4. `scripts/model_v3.py:909` — `val_mae_exog_for_col` (ikinci, canlı tanım)
-5. `scripts/model_v3.py:928` — `choose_best_exog_per_var` (değişken bazlı hibrit)
-6. `scripts/model_v3.py:676` — `optimize_rf_rocv` (ROCV grid search)
-7. `scripts/model_v3.py:441` — `fit_nnls_weights_on_val` (stacking ağırlıkları)
-8. `scripts/model_v3.py:586` — `select_intermittent` (seyrek/yoğun yönlendirme)
-9. `scripts/model_v3.py:1347` — `main` (panel yükleme + paralel dispatch)
-10. `scripts/OMS.py:715` — Probe→Escalate'siz referans `run_for_sku` (yeni yönlendirmenin neyin yerini aldığını anlamak için v3 ile karşılaştır)
+1. `services/worker/pipelines/cold.py` — Ana cold pipeline (`run_cold`)
+2. `services/worker/pipelines/warm.py` — Warm refit pipeline (`run_warm`)
+3. `services/worker/forecasting/recursive.py` — Özyinelemeli Y tahmin döngüsü
+4. `services/worker/forecasting/bootstrap.py` — Laplace PI oluşturma
+5. `services/worker/selection/hybrid.py` — Değişken bazlı EXOG seçimi (`val_mae_exog_for_col`, `choose_best_exog_per_var`)
+6. `services/worker/selection/probe_escalate.py` — Probe → Escalate kapısı
+7. `services/worker/models/stacking.py` — NNLS + simplex projeksiyonu
+8. `services/worker/models/intermittent.py` — Croston / SBA / TSB + `select_intermittent`
+9. `controller/src/orchestrator.rs` — Cold/warm/dead dispatch, drift check
+10. `controller/src/queue.rs` — `forecast_jobs` claim/run/retry semantiği
+11. `controller/src/server.rs` — REST endpoint'leri
+12. `dashboard/src/pages/SkuDetailPage.tsx` — SKU başına dashboard kompozisyonu
+
+Deploy + altyapı:
+
+13. `justfile` — operasyonel komutlar
+14. `deploy/scripts/deploy.sh` — build → push → helm upgrade akışı (dirty-tag detayı dahil)
+15. `deploy/helm/templates/deployment.yaml` + `cronjob.yaml`
+16. `deploy/helm/values/controller.yaml` — cron schedule, ingress regex/rewrite, resource limit'leri
+
+Tarihi referans (yeni mantık eklerken karşılaştırmak için):
+
+17. `scripts/model_v3.py:983` — eski monolitik `run_for_sku` (services/worker'a parçalanmadan önceki halini görmek için)
+18. `proje_ozeti.md` — Tez anlatımı (model seçim mantığının "neden" tarafı)
