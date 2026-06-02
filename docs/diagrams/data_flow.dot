@@ -1,0 +1,156 @@
+digraph data_flow {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    pad=0.4,
+    nodesep=0.45,
+    ranksep=0.7,
+    fontname="Inter, Arial, sans-serif",
+    label="Forecasting Data Flow",
+    labelloc=t,
+    fontsize=24
+  ];
+
+  node [
+    shape=rect,
+    style="rounded,filled",
+    fontname="Inter, Arial, sans-serif",
+    fontsize=11,
+    margin="0.12,0.08",
+    color="#555555",
+    fillcolor="#f7f7f7"
+  ];
+
+  edge [
+    fontname="Inter, Arial, sans-serif",
+    fontsize=10,
+    color="#555555",
+    arrowsize=0.75
+  ];
+
+  subgraph cluster_inputs {
+    label="Input data";
+    color="#9ae6b4";
+    fillcolor="#f0fff4";
+    style="rounded,filled";
+    panel_csv [
+      label="panel_sales_orders_stock.csv\nmonthly SKU demand, orders, stock",
+      shape=note,
+      fillcolor="#ecfdf5",
+      color="#2f855a"
+    ];
+    config_csv [
+      label="sku_config.csv\nMOQ, lot, coverage,\nservice policy",
+      shape=note,
+      fillcolor="#ecfdf5",
+      color="#2f855a"
+    ];
+  }
+
+  seed [label="controller seed\n/ ingest-panel"];
+
+  subgraph cluster_db_source {
+    label="Postgres source tables";
+    color="#d6bc8a";
+    fillcolor="#fffbeb";
+    style="rounded,filled";
+    panel_db [
+      label="sales_panel",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+    config_db [
+      label="sku_config",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+  }
+
+  trigger [label="Run trigger\nDashboard, CLI, or\nOfelia schedule"];
+  queue [label="Rust controller\ncreate forecast_runs + forecast_jobs\nclaim jobs in parallel"];
+  decision [
+    label="Prior completed run\nand no drift?",
+    shape=diamond,
+    fillcolor="#eef6ff",
+    color="#4f83cc"
+  ];
+
+  subgraph cluster_worker {
+    label="Python FastAPI worker";
+    color="#cbd5e1";
+    fillcolor="#f8fafc";
+    style="rounded,filled";
+    cold [label="Cold path\nROCV + EXOG selection\nRF/XGB training + REFIT"];
+    warm [label="Warm path\nreuse cached winner\nrefit with cached hyperparameters"];
+    forecast [label="Recursive forecast\n3m / 6m horizons\nPI80 / PI95 intervals"];
+    oms [label="OMS policy\nstockout probability\nMOQ / lot rounded order qty"];
+  }
+
+  models [
+    label="models_data volume\nserialized model blobs",
+    shape=cylinder,
+    fillcolor="#fff4db",
+    color="#b7791f"
+  ];
+
+  subgraph cluster_db_results {
+    label="Postgres result tables";
+    color="#d6bc8a";
+    fillcolor="#fffbeb";
+    style="rounded,filled";
+    run_tables [
+      label="sku_runs, combinations,\nmodels, exog_selection",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+    prediction_tables [
+      label="sku_run_predictions\nsku_run_recommendation",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+  }
+
+  dashboard [
+    label="React dashboard\nSKU detail, run status,\norder cart CSV",
+    fillcolor="#f5f0ff",
+    color="#805ad5"
+  ];
+  grafana [
+    label="Grafana dashboards\nportfolio KPIs and model ops",
+    fillcolor="#f5f0ff",
+    color="#805ad5"
+  ];
+
+  panel_csv -> seed;
+  config_csv -> seed;
+  seed -> panel_db;
+  seed -> config_db;
+
+  trigger -> queue;
+  panel_db -> queue;
+  config_db -> queue;
+  queue -> decision;
+
+  decision -> cold [label="no / drift"];
+  decision -> warm [label="yes"];
+  cold -> forecast;
+  warm -> forecast;
+  forecast -> oms;
+
+  cold -> models [label="save models"];
+  warm -> models [label="save refreshed models"];
+  models -> queue [label="cached specs and blobs"];
+
+  oms -> queue [label="ForecastResult JSON"];
+  queue -> run_tables [label="transactional persist"];
+  queue -> prediction_tables [label="transactional persist"];
+
+  run_tables -> dashboard;
+  prediction_tables -> dashboard;
+  run_tables -> grafana;
+  prediction_tables -> grafana;
+}

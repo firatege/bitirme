@@ -1,0 +1,139 @@
+digraph service_topology {
+  graph [
+    rankdir=LR,
+    bgcolor="white",
+    pad=0.4,
+    nodesep=0.55,
+    ranksep=0.85,
+    fontname="Inter, Arial, sans-serif",
+    label="Service Topology",
+    labelloc=t,
+    fontsize=24
+  ];
+
+  node [
+    shape=rect,
+    style="rounded,filled",
+    fontname="Inter, Arial, sans-serif",
+    fontsize=12,
+    margin="0.12,0.08",
+    color="#555555",
+    fillcolor="#f7f7f7"
+  ];
+
+  edge [
+    fontname="Inter, Arial, sans-serif",
+    fontsize=10,
+    color="#555555",
+    arrowsize=0.75
+  ];
+
+  browser [
+    label="Admin / analyst browser",
+    fillcolor="#eef6ff",
+    color="#4f83cc"
+  ];
+
+  subgraph cluster_frontend {
+    label="Frontend";
+    color="#cbd5e1";
+    fillcolor="#f8fafc";
+    style="rounded,filled";
+    dashboard [label="React dashboard\nnginx container\nlocalhost:8081"];
+  }
+
+  subgraph cluster_app {
+    label="Application services";
+    color="#cbd5e1";
+    fillcolor="#f8fafc";
+    style="rounded,filled";
+    controller [label="Rust controller REST API\nActix Web :9000\nrun queue + orchestration"];
+    worker [label="Python forecasting worker\nFastAPI :8000\ncold, warm, drift pipelines"];
+    scheduler [label="Ofelia scheduler\nmonthly portfolio run"];
+  }
+
+  subgraph cluster_storage {
+    label="Storage";
+    color="#d6bc8a";
+    fillcolor="#fffbeb";
+    style="rounded,filled";
+    postgres [
+      label="PostgreSQL 16\nsales_panel, sku_config\nruns, jobs, predictions,\nrecommendations",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+    models [
+      label="models_data volume\nserialized RF / XGB blobs",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+    grafana_data [
+      label="grafana_data volume\nGrafana state",
+      shape=cylinder,
+      fillcolor="#fff4db",
+      color="#b7791f"
+    ];
+  }
+
+  subgraph cluster_ops {
+    label="Operations and reporting";
+    color="#c4b5fd";
+    fillcolor="#faf5ff";
+    style="rounded,filled";
+    grafana [
+      label="Grafana :3000\nprovisioned dashboards",
+      fillcolor="#f5f0ff",
+      color="#805ad5"
+    ];
+    adminer [
+      label="Adminer :8080\nmanual DB inspection",
+      fillcolor="#f5f0ff",
+      color="#805ad5"
+    ];
+  }
+
+  subgraph cluster_inputs {
+    label="Seed inputs";
+    color="#9ae6b4";
+    fillcolor="#f0fff4";
+    style="rounded,filled";
+    panel_csv [
+      label="panel_sales_orders_stock.csv\nmonthly SKU panel",
+      shape=note,
+      fillcolor="#ecfdf5",
+      color="#2f855a"
+    ];
+    config_csv [
+      label="sku_config.csv\nMOQ, lot, service policy",
+      shape=note,
+      fillcolor="#ecfdf5",
+      color="#2f855a"
+    ];
+    seed [
+      label="controller seed\nidempotent CSV import",
+      fillcolor="#ecfdf5",
+      color="#2f855a"
+    ];
+  }
+
+  browser -> dashboard [label="uses"];
+  dashboard -> controller [label="REST JSON\n/runs, /skus, /predictions"];
+  dashboard -> grafana [label="embeds dashboards"];
+
+  scheduler -> controller [label="POST /runs\nmonthly trigger"];
+  controller -> postgres [label="reads source data\nwrites run state/results"];
+  controller -> worker [label="POST /forecast/cold\nPOST /forecast/warm\nPOST /drift/check"];
+  controller -> models [label="passes blob_dir\nreads cached metadata"];
+
+  worker -> controller [label="ForecastResult JSON"];
+  worker -> models [label="writes model artifacts"];
+
+  grafana -> postgres [label="SQL dashboards"];
+  adminer -> postgres [label="manual SQL UI"];
+
+  panel_csv -> seed;
+  config_csv -> seed;
+  seed -> postgres [label="upsert"];
+}

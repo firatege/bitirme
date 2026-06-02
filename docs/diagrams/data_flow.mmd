@@ -1,0 +1,74 @@
+flowchart LR
+  subgraph inputs["Input data"]
+    panel_csv["panel_sales_orders_stock.csv\nmonthly SKU demand, orders, stock"]
+    config_csv["sku_config.csv\nMOQ, lot, coverage, service policy"]
+  end
+
+  seed["controller seed / ingest-panel"]
+
+  subgraph db_source["Postgres source tables"]
+    panel_db[("sales_panel")]
+    config_db[("sku_config")]
+  end
+
+  trigger["Run trigger\nDashboard, CLI, or Ofelia schedule"]
+  queue["Rust controller\ncreate forecast_runs + forecast_jobs\nclaim jobs in parallel"]
+  decision{"Prior completed run\nand no drift?"}
+
+  subgraph worker["Python FastAPI worker"]
+    cold["Cold path\nROCV + EXOG selection\nRF/XGB training + REFIT"]
+    warm["Warm path\nreuse cached winner\nrefit with cached hyperparameters"]
+    forecast["Recursive forecast\n3m / 6m horizons\nPI80 / PI95 intervals"]
+    oms["OMS policy\nstockout probability\nMOQ / lot rounded order qty"]
+  end
+
+  models[("models_data volume\nserialized model blobs")]
+
+  subgraph db_results["Postgres result tables"]
+    run_tables[("sku_runs, combinations,\nmodels, exog_selection")]
+    prediction_tables[("sku_run_predictions\nsku_run_recommendation")]
+  end
+
+  dashboard["React dashboard\nSKU detail, run status,\norder cart CSV"]
+  grafana["Grafana dashboards\nportfolio KPIs and model ops"]
+
+  panel_csv --> seed
+  config_csv --> seed
+  seed --> panel_db
+  seed --> config_db
+
+  trigger --> queue
+  panel_db --> queue
+  config_db --> queue
+  queue --> decision
+
+  decision -->|"no / drift"| cold
+  decision -->|"yes"| warm
+  cold --> forecast
+  warm --> forecast
+  forecast --> oms
+
+  cold -->|"save models"| models
+  warm -->|"save refreshed models"| models
+  models -->|"cached specs and blobs"| queue
+
+  oms -->|"ForecastResult JSON"| queue
+  queue -->|"transactional persist"| run_tables
+  queue -->|"transactional persist"| prediction_tables
+
+  run_tables --> dashboard
+  prediction_tables --> dashboard
+  run_tables --> grafana
+  prediction_tables --> grafana
+
+  classDef source fill:#ecfdf5,stroke:#2f855a,color:#052e16
+  classDef db fill:#fff4db,stroke:#b7791f,color:#2d1b00
+  classDef process fill:#f7f7f7,stroke:#555,color:#111
+  classDef decision fill:#eef6ff,stroke:#4f83cc,color:#12263f
+  classDef output fill:#f5f0ff,stroke:#805ad5,color:#211047
+
+  class panel_csv,config_csv source
+  class panel_db,config_db,models,run_tables,prediction_tables db
+  class seed,trigger,queue,cold,warm,forecast,oms process
+  class decision decision
+  class dashboard,grafana output

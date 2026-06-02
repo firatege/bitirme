@@ -1,0 +1,60 @@
+flowchart LR
+  browser["Admin / analyst browser"]
+
+  subgraph frontend["Frontend"]
+    dashboard["React dashboard\nnginx container\nlocalhost:8081"]
+  end
+
+  subgraph app["Application services"]
+    controller["Rust controller REST API\nActix Web :9000\nrun queue + orchestration"]
+    worker["Python forecasting worker\nFastAPI :8000\ncold, warm, drift pipelines"]
+    scheduler["Ofelia scheduler\nmonthly portfolio run"]
+  end
+
+  subgraph storage["Storage"]
+    postgres[("PostgreSQL 16\nsales_panel, sku_config\nruns, jobs, predictions,\nrecommendations")]
+    models[("models_data volume\nserialized RF / XGB blobs")]
+    grafana_data[("grafana_data volume\nGrafana state")]
+  end
+
+  subgraph ops["Operations and reporting"]
+    grafana["Grafana :3000\nprovisioned dashboards"]
+    adminer["Adminer :8080\nmanual DB inspection"]
+  end
+
+  subgraph inputs["Seed inputs"]
+    panel_csv["panel_sales_orders_stock.csv\nmonthly SKU panel"]
+    config_csv["sku_config.csv\nMOQ, lot, service policy"]
+    seed["controller seed\nidempotent CSV import"]
+  end
+
+  browser -->|"uses"| dashboard
+  dashboard -->|"REST JSON\n/runs, /skus, /predictions"| controller
+  dashboard -->|"embeds dashboards"| grafana
+
+  scheduler -->|"POST /runs\nmonthly trigger"| controller
+  controller -->|"reads source data\nwrites run state/results"| postgres
+  controller -->|"POST /forecast/cold\nPOST /forecast/warm\nPOST /drift/check"| worker
+  controller -->|"passes blob_dir\nreads cached model metadata"| models
+
+  worker -->|"returns ForecastResult JSON"| controller
+  worker -->|"writes model artifacts"| models
+
+  grafana -->|"SQL dashboards"| postgres
+  adminer -->|"manual SQL UI"| postgres
+
+  panel_csv --> seed
+  config_csv --> seed
+  seed -->|"upsert"| postgres
+
+  classDef user fill:#eef6ff,stroke:#4f83cc,color:#12263f
+  classDef service fill:#f7f7f7,stroke:#555,color:#111
+  classDef store fill:#fff4db,stroke:#b7791f,color:#2d1b00
+  classDef input fill:#ecfdf5,stroke:#2f855a,color:#052e16
+  classDef ops fill:#f5f0ff,stroke:#805ad5,color:#211047
+
+  class browser user
+  class dashboard,controller,worker,scheduler service
+  class postgres,models,grafana_data store
+  class panel_csv,config_csv,seed input
+  class grafana,adminer ops
